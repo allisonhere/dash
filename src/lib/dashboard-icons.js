@@ -47,7 +47,8 @@ const HOST_ALIASES = new Map([
 	['twitch', 'twitch'],
 	['pluto', 'pluto-tv'],
 	['plutotv', 'pluto-tv'],
-	['hass', 'home-assistant']
+	['hass', 'home-assistant'],
+	['cockpit', 'cockpit-light']
 ]);
 
 /** @param {string} url */
@@ -106,7 +107,12 @@ function explicitDashboardIconSlug(icon) {
 	}
 
 	const trimmed = icon.trim();
-	return trimmed.startsWith('di:') ? slugify(trimmed.slice(3)) : '';
+	if (!trimmed.startsWith('di:')) {
+		return '';
+	}
+
+	const slug = slugify(trimmed.slice(3));
+	return aliasFor(slug) || slug;
 }
 
 /** @param {string} slug */

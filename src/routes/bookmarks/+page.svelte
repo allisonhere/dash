@@ -89,6 +89,10 @@
 		return iconCandidates({ title: draftTitle, url: draftUrl, icon: draftIcon })[0] ?? '';
 	}
 
+	function fallbackIconText(icon: string) {
+		return icon.trim().toLowerCase().startsWith('di:') ? '↗' : icon || '↗';
+	}
+
 	function tryNextIcon(bookmark: Bookmark) {
 		const nextAttempt = (failedIconAttempts[bookmark.id] ?? 0) + 1;
 		failedIconAttempts[bookmark.id] = nextAttempt;
@@ -323,7 +327,7 @@
 									class="relative grid h-9 w-9 shrink-0 place-items-center border border-[color-mix(in_srgb,var(--cat)_35%,transparent)] bg-[color-mix(in_srgb,var(--cat)_13%,transparent)] transition duration-200 group-hover/card:scale-105 group-hover/card:shadow-[0_0_18px_-4px_color-mix(in_srgb,var(--cat)_70%,transparent)]"
 								>
 									{#if !loadedFavicons[bookmark.id]}
-										<span class="text-base">{bookmark.icon}</span>
+										<span class="text-base">{fallbackIconText(bookmark.icon)}</span>
 									{/if}
 									{#if activeIconUrl(bookmark)}
 										<img
@@ -431,7 +435,7 @@
 				<div
 					class="relative grid h-11 w-11 shrink-0 place-items-center border border-[color-mix(in_srgb,var(--theme-accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--theme-accent)_13%,transparent)]"
 				>
-					<span class="text-lg">{draftIcon || '↗'}</span>
+					<span class="text-lg">{fallbackIconText(draftIcon)}</span>
 					{#if draftIconUrl()}
 						<img
 							src={draftIconUrl()}

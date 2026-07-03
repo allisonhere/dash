@@ -44,6 +44,19 @@ describe('dashboard icon resolver', () => {
 		);
 	});
 
+	it('uses the light Cockpit icon for explicit Cockpit slugs', () => {
+		const candidates = iconCandidatesForBookmark({
+			title: 'Cockpit',
+			url: 'https://jarvis:9090/system',
+			icon: 'di:cockpit'
+		});
+
+		assert.equal(
+			candidates[0],
+			'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/cockpit-light.svg'
+		);
+	});
+
 	it('extracts hosts from valid urls', () => {
 		assert.equal(hostOf('https://example.com/path'), 'example.com');
 		assert.equal(hostOf('not a url'), '');
