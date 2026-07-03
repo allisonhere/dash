@@ -3,10 +3,18 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import { invalidate } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import type { Snippet } from 'svelte';
+	import { composeThemeFromLocalPayload } from '$lib/omarchy-theme-core.js';
+
+	type Theme = import('./$types').LayoutData['theme'];
 
 	let { children, data }: { children: Snippet; data: import('./$types').LayoutData } = $props();
+
+	const LOCAL_HELPER_URL = 'http://127.0.0.1:43741';
+	const LOCAL_HELPER_URL_KEY = 'dash:local-omarchy-helper-url';
+	const LOCAL_THEME_KEY = 'dash:local-omarchy-theme';
 
 	const links = [
 		{ href: '/', label: 'Overview' },
@@ -20,12 +28,16 @@
 
 	let pickerOpen = $state(false);
 	let switching = $state(false);
+	let localOmarchy = $state(false);
+	let localError = $state('');
+	let localTheme = $state<Theme | null>(null);
+	const effectiveTheme = $derived(localTheme ?? data.theme);
 
 	const inOmarchyMode = $derived(data.selection.mode === 'omarchy');
 
 	const backgroundUrl = $derived(
-		inOmarchyMode && data.theme.backgroundVersion
-			? `/theme/background?v=${data.theme.backgroundVersion}`
+		!localOmarchy && inOmarchyMode && effectiveTheme.backgroundVersion
+			? `/theme/background?v=${effectiveTheme.backgroundVersion}`
 			: null
 	);
 
@@ -37,6 +49,7 @@
 		switching = true;
 
 		try {
+			clearLocalOmarchy();
 			await fetch('/theme/select', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -49,10 +62,73 @@
 		}
 	}
 
+	async function selectLocalOmarchy() {
+		if (switching) {
+			return;
+		}
+
+		switching = true;
+		localError = '';
+
+		try {
+			await refreshLocalOmarchy();
+			localOmarchy = true;
+			pickerOpen = false;
+		} catch (error) {
+			localError =
+				error instanceof Error
+					? error.message
+					: 'Local Omarchy helper is not available.';
+		} finally {
+			switching = false;
+		}
+	}
+
+	async function refreshLocalOmarchy() {
+		const response = await fetch(`${localHelperUrl()}/theme`, { cache: 'no-store' });
+
+		if (!response.ok) {
+			throw new Error('Start the local Omarchy helper, then try again.');
+		}
+
+		const payload = await response.json();
+		const theme = composeThemeFromLocalPayload(payload) as Theme;
+		localTheme = theme;
+		localStorage.setItem(LOCAL_THEME_KEY, JSON.stringify(payload));
+		localError = '';
+	}
+
+	function clearLocalOmarchy() {
+		localOmarchy = false;
+		localError = '';
+		localStorage.removeItem(LOCAL_THEME_KEY);
+		localTheme = null;
+	}
+
+	function localHelperUrl() {
+		return localStorage.getItem(LOCAL_HELPER_URL_KEY)?.trim() || LOCAL_HELPER_URL;
+	}
+
+	onMount(() => {
+		const raw = localStorage.getItem(LOCAL_THEME_KEY);
+
+		if (!raw) {
+			return;
+		}
+
+		try {
+			const payload = JSON.parse(raw);
+			localTheme = composeThemeFromLocalPayload(payload) as Theme;
+			localOmarchy = true;
+		} catch {
+			localStorage.removeItem(LOCAL_THEME_KEY);
+		}
+	});
+
 	// Live-follow only matters in omarchy mode: subscribe to theme-change events
 	// from the desktop and restyle in place. Built-in themes need no watcher.
 	$effect(() => {
-		if (!inOmarchyMode) {
+		if (!inOmarchyMode || localOmarchy) {
 			return;
 		}
 
@@ -60,12 +136,53 @@
 		source.onmessage = () => invalidate('omarchy:theme');
 		return () => source.close();
 	});
+
+	$effect(() => {
+		if (!localOmarchy) {
+			return;
+		}
+
+		let refreshing = false;
+		const source = new EventSource(`${localHelperUrl()}/events`);
+		const refresh = () => {
+			if (refreshing) {
+				return;
+			}
+
+			refreshing = true;
+			refreshLocalOmarchy()
+				.catch(() => {
+					localError = 'Local Omarchy helper is not available.';
+				})
+				.finally(() => {
+					refreshing = false;
+				});
+		};
+
+		source.onmessage = refresh;
+		source.onerror = () => {
+			localError = 'Local Omarchy helper is not available.';
+		};
+
+		const fallback = setInterval(() => {
+			if (document.hidden) {
+				return;
+			}
+
+			refresh();
+		}, 3000);
+
+		return () => {
+			source.close();
+			clearInterval(fallback);
+		};
+	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 <div
 	class="relative isolate min-h-dvh text-[var(--theme-fg)]"
-	style={`${data.theme.cssText}; color-scheme: ${data.theme.mode}`}
+	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}`}
 >
 	<div class="fixed inset-0 -z-30 bg-[var(--theme-bg)]"></div>
 
@@ -127,7 +244,7 @@
 					aria-expanded={pickerOpen}
 				>
 					<span class="h-3 w-3 border border-[color-mix(in_srgb,var(--theme-fg)_25%,transparent)] bg-[var(--theme-accent)]"></span>
-					<span class="hidden capitalize sm:inline">{data.theme.name}</span>
+					<span class="hidden capitalize sm:inline">{effectiveTheme.name}</span>
 					<span class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">▾</span>
 				</button>
 
@@ -146,7 +263,7 @@
 							Built-in themes
 						</p>
 						{#each data.builtins as builtin (builtin.slug)}
-							{@const selected = data.selection.mode === 'builtin' && data.selection.name === builtin.slug}
+							{@const selected = !localOmarchy && data.selection.mode === 'builtin' && data.selection.name === builtin.slug}
 							<button
 								type="button"
 								role="menuitem"
@@ -159,9 +276,31 @@
 							</button>
 						{/each}
 
+						<div class="my-1 border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)]"></div>
+						<button
+							type="button"
+							role="menuitem"
+							disabled={switching}
+							onclick={selectLocalOmarchy}
+							class={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-sm transition hover:bg-[color-mix(in_srgb,var(--theme-fg)_8%,transparent)] ${localOmarchy ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-fg)]'}`}
+						>
+							<span class="flex flex-col">
+								<span>This device's Omarchy</span>
+								<span class="text-[10px] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+									Requires local helper
+								</span>
+							</span>
+							{#if localOmarchy}<span aria-hidden="true">✓</span>{/if}
+						</button>
+						{#if localError}
+							<p class="px-2 py-1 text-[10px] leading-4 text-[var(--theme-danger)]">
+								{localError}
+							</p>
+						{/if}
+
 						{#if data.omarchyAvailable}
 							<div class="my-1 border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)]"></div>
-							{@const omarchySelected = data.selection.mode === 'omarchy'}
+							{@const omarchySelected = !localOmarchy && data.selection.mode === 'omarchy'}
 							<button
 								type="button"
 								role="menuitem"

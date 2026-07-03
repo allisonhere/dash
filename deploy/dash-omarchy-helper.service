@@ -1,0 +1,13 @@
+[Unit]
+Description=Dash local Omarchy theme helper
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/dash
+ExecStart=/usr/bin/env npm run omarchy:helper
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

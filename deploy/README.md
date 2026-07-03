@@ -9,6 +9,8 @@ webhost involved.
   in the `./data` volume. Edits from any browser persist there.
 - **Built-in themes** are the default and work with zero setup.
 - **Match omarchy** reads a bind-mounted copy of your omarchy theme (see below).
+- **This device's Omarchy** reads the current theme from a local helper running
+  on the Omarchy desktop that is viewing the dashboard.
 
 ## Run it
 
@@ -53,6 +55,54 @@ Re-run that whenever you change your desktop theme and want the dashboard to
 follow, then reload the page (or it picks it up on next load). If you run dash
 directly on an omarchy desktop instead of a container, drop the `OMARCHY_DIR`
 env and it reads `~/.config/omarchy` live.
+
+## This device's Omarchy (optional)
+
+When dash is deployed on `192.168.86.74`, the container cannot read the
+desktop's live `~/.config/omarchy` directly. Start the local helper on each
+Omarchy desktop that should drive its own browser theme:
+
+```bash
+npm run omarchy:helper
+```
+
+Then open dash, use the theme menu, and choose **This device's Omarchy**. The
+choice is stored in that browser only. The helper watches
+`~/.config/omarchy/current`, so changing your Omarchy theme updates the open dash
+tab automatically.
+
+To start it automatically after login, install the user service from this repo:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/dash-omarchy-helper.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now dash-omarchy-helper.service
+```
+
+The service assumes this repo lives at `~/Projects/dash`. If it is somewhere
+else, edit `WorkingDirectory=` in
+`~/.config/systemd/user/dash-omarchy-helper.service` before enabling it.
+
+Useful service commands:
+
+```bash
+systemctl --user status dash-omarchy-helper.service
+systemctl --user restart dash-omarchy-helper.service
+journalctl --user -u dash-omarchy-helper.service -f
+```
+
+The helper listens only on `127.0.0.1:43741`. Override defaults if needed:
+
+```bash
+OMARCHY_HELPER_PORT=43741 OMARCHY_DIR=~/.config/omarchy npm run omarchy:helper
+```
+
+If you change the port, point this browser at it once from the devtools console:
+
+```js
+localStorage.setItem('dash:local-omarchy-helper-url', 'http://127.0.0.1:43741')
+```
 
 ## Notes
 
