@@ -1,4 +1,15 @@
-# sv
+# dash
+
+Install the local Omarchy helper on any Omarchy desktop:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/allisonhere/dash/master/deploy/install-omarchy-helper.sh | bash
+```
+
+Then open `http://192.168.86.74:3939` and choose **This device's Omarchy** in the
+theme menu.
+
+See `deploy/README.md` for server deployment notes.
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
