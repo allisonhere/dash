@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { hostOf, iconCandidatesForBookmark } from '$lib/dashboard-icons.js';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
 
@@ -21,6 +22,7 @@
 	let confirmingDelete = $state<string | null>(null);
 	let searchInput = $state<HTMLInputElement>();
 	let loadedFavicons = $state<Record<string, boolean>>({});
+	let failedIconAttempts = $state<Record<string, number>>({});
 
 	let draftTitle = $state('');
 	let draftUrl = $state('');
@@ -75,25 +77,22 @@
 		return `var(${PALETTE[index % PALETTE.length]}, var(--theme-accent))`;
 	}
 
-	function hostOf(url: string) {
-		try {
-			return new URL(url).hostname;
-		} catch {
-			return '';
-		}
+	function iconCandidates(bookmark: Pick<Bookmark, 'title' | 'url' | 'icon'>) {
+		return iconCandidatesForBookmark(bookmark);
 	}
 
-	function faviconOf(url: string) {
-		const host = hostOf(url);
+	function activeIconUrl(bookmark: Bookmark) {
+		return iconCandidates(bookmark)[failedIconAttempts[bookmark.id] ?? 0] ?? '';
+	}
 
-		// Local services (IPs, .local, single-label hosts) have no public favicon —
-		// the lookup service returns a generic placeholder, so keep the user's icon instead.
-		const isLocal =
-			!host.includes('.') ||
-			/^[\d.]+$/.test(host) ||
-			/\.(local|lan|home|internal)$/.test(host);
+	function draftIconUrl() {
+		return iconCandidates({ title: draftTitle, url: draftUrl, icon: draftIcon })[0] ?? '';
+	}
 
-		return host && !isLocal ? `https://icons.duckduckgo.com/ip3/${host}.ico` : '';
+	function tryNextIcon(bookmark: Bookmark) {
+		const nextAttempt = (failedIconAttempts[bookmark.id] ?? 0) + 1;
+		failedIconAttempts[bookmark.id] = nextAttempt;
+		loadedFavicons[bookmark.id] = false;
 	}
 
 	function openCreate() {
@@ -326,14 +325,14 @@
 									{#if !loadedFavicons[bookmark.id]}
 										<span class="text-base">{bookmark.icon}</span>
 									{/if}
-									{#if faviconOf(bookmark.url)}
+									{#if activeIconUrl(bookmark)}
 										<img
-											src={faviconOf(bookmark.url)}
+											src={activeIconUrl(bookmark)}
 											alt=""
 											loading="lazy"
 											class={`absolute h-5 w-5 transition ${loadedFavicons[bookmark.id] ? 'opacity-100' : 'opacity-0'}`}
 											onload={() => (loadedFavicons[bookmark.id] = true)}
-											onerror={(event) => (event.currentTarget as HTMLImageElement).remove()}
+											onerror={() => tryNextIcon(bookmark)}
 										/>
 									{/if}
 								</div>
@@ -433,9 +432,9 @@
 					class="relative grid h-11 w-11 shrink-0 place-items-center border border-[color-mix(in_srgb,var(--theme-accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--theme-accent)_13%,transparent)]"
 				>
 					<span class="text-lg">{draftIcon || '↗'}</span>
-					{#if faviconOf(draftUrl)}
+					{#if draftIconUrl()}
 						<img
-							src={faviconOf(draftUrl)}
+							src={draftIconUrl()}
 							alt=""
 							class="absolute h-6 w-6 bg-[color-mix(in_srgb,var(--theme-accent)_13%,var(--theme-bg))]"
 							onerror={(event) => (event.currentTarget as HTMLImageElement).remove()}
@@ -490,7 +489,7 @@
 					/>
 				</label>
 
-				<div class="grid gap-4 sm:grid-cols-[1fr_6rem]">
+				<div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,14rem)]">
 					<label class="grid gap-2 text-sm">
 						<span class="text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]">Category</span>
 						<input
@@ -511,15 +510,15 @@
 						<input
 							name="icon"
 							bind:value={draftIcon}
-							maxlength="4"
-							class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-2.5 text-center outline-none transition focus:border-[var(--theme-accent)] focus:shadow-[0_0_16px_-6px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]"
+							placeholder="di:jellyfin or ↗"
+							class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-2.5 outline-none transition placeholder:text-[color-mix(in_srgb,var(--theme-fg)_32%,transparent)] focus:border-[var(--theme-accent)] focus:shadow-[0_0_16px_-6px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]"
 						/>
 					</label>
 				</div>
 
 				<p class="text-xs leading-5 text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
-					The icon is a fallback — a favicon is fetched automatically when the site has one.
-					Bare hostnames get https:// added for you.
+					Icons load from Dashboard Icons when possible. Use this field for an emoji fallback or
+					a specific slug like di:home-assistant. Bare hostnames get https:// added for you.
 				</p>
 
 				<div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
