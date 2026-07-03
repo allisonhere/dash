@@ -18,9 +18,9 @@ export default defineConfig({
 
 			// LAN-only dashboard reached by several names (IP, hostname, caddy). A
 			// single pinned ORIGIN would 403 form edits from the other names, so we
-			// turn off origin checking. Safe here: trusted network, no auth/secrets
-			// mutated beyond local bookmarks. Re-enable if it's ever exposed publicly.
-			csrf: { checkOrigin: false }
+			// trust all origins. Safe here: trusted network, no auth/secrets mutated
+			// beyond local dashboard data. Restrict this if it's ever exposed publicly.
+			csrf: { trustedOrigins: ['*'] }
 		})
 	]
 });

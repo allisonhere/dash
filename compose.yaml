@@ -9,8 +9,6 @@ services:
       # Reachable from every device on the LAN (desktops, phone).
       - "3939:3000"
     environment:
-      # Must match how devices reach it, or form POSTs (bookmark edits) are rejected.
-      - ORIGIN=http://192.168.86.74:3939
       # Read the bind-mounted omarchy folder below as if it were local, so the
       # "Match omarchy" theme option works here.
       - OMARCHY_DIR=/omarchy

@@ -23,14 +23,15 @@ cp ~/.config/custom-dash/feeds.json    data/ 2>/dev/null || true
 [ -f ~/.config/custom-dash/homelab.json ] && \
   jq '.dockerHosts=[{"name":"services","ssh":"local"}]' ~/.config/custom-dash/homelab.json > data/homelab.json
 
-# edit compose.yaml: set ORIGIN to how devices reach it (http://<host-ip>:3000)
 docker compose up -d --build
 ```
 
-Open `http://<host-ip>:3000` from any device on the LAN.
+Open `http://<host-ip>:3939` from any device on the LAN.
 
 Key points in `compose.yaml`:
-- `ORIGIN` **must** match the URL devices use, or form POSTs (bookmark edits) 403.
+- The app trusts all CSRF origins because it is intended for LAN-only use and may
+  be reached by IP, hostname, or reverse-proxy name. Restrict `csrf.trustedOrigins`
+  in `vite.config.ts` before exposing it publicly.
 - `./data:/config` is the writable store — back this dir up.
 - `/var/run/docker.sock:...:ro` lets the Homelab page read the host's containers
   (set a docker host with `"ssh": "local"` in `homelab.json`). Proxmox is reached
