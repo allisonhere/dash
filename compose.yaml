@@ -1,0 +1,27 @@
+services:
+  dash:
+    build: .
+    image: dash
+    container_name: dash
+    restart: unless-stopped
+    ports:
+      # Host 3939 -> container 3000 (3000 is already used on jarvis).
+      # Reachable from every device on the LAN (desktops, phone).
+      - "3939:3000"
+    environment:
+      # Must match how devices reach it, or form POSTs (bookmark edits) are rejected.
+      - ORIGIN=http://192.168.86.74:3939
+      # Read the bind-mounted omarchy folder below as if it were local, so the
+      # "Match omarchy" theme option works here.
+      - OMARCHY_DIR=/omarchy
+    volumes:
+      # All data + theme selection live here — edits from any browser write back
+      # to this dir, and it persists across restarts. Seed it with your JSON.
+      - ./data:/config
+      # Your omarchy theme, read-only. "Match omarchy" reads this. It's a copy —
+      # re-sync it (rsync -aL ~/.config/omarchy/current/ jarvis:~/dash/omarchy/current/)
+      # when you change your desktop theme and want the dashboard to follow.
+      - ./omarchy:/omarchy:ro
+      # Lets the homelab page read the host's containers (config a docker host
+      # with "ssh": "local"). Read-only.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
