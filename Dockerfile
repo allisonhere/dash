@@ -8,6 +8,8 @@ RUN npm run build && npm prune --omit=dev
 
 # --- runtime stage ---
 FROM node:22-alpine
+# Links the ghcr package to the repo so it inherits access settings.
+LABEL org.opencontainers.image.source="https://github.com/allisonhere/dash"
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOST=0.0.0.0 DASH_CONFIG_DIR=/config
 

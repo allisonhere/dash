@@ -1,7 +1,10 @@
 services:
   dash:
+    # Published by .github/workflows/publish.yml on every push to master, so
+    # Portainer can re-pull/update this like any other container. `build: .`
+    # stays for local `docker compose up --build` without the registry.
     build: .
-    image: dash
+    image: ghcr.io/allisonhere/dash:latest
     container_name: dash
     restart: unless-stopped
     ports:
