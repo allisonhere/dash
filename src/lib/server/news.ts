@@ -8,6 +8,7 @@ export type NewsItem = {
 	title: string;
 	url: string;
 	summary: string;
+	commentsUrl: string | null;
 	image: string | null;
 	publishedAt: string | null;
 };
@@ -176,6 +177,8 @@ function parseFeed(xml: string, feed: Feed): { title: string; items: NewsItem[] 
 function rssItem(item: Record<string, unknown>, feed: Feed, index: number): NewsItem {
 	const url = text(item.link) || text(item.guid);
 	const html = text(item['content:encoded']) || text(item.description);
+	const commentsUrl = text(item.comments) || null;
+	const summary = summarize(html);
 
 	return {
 		id: text(item.guid) || url || `${feed.id}-${index}`,
@@ -183,7 +186,10 @@ function rssItem(item: Record<string, unknown>, feed: Feed, index: number): News
 		feedTitle: feed.title,
 		title: decodeEntities(text(item.title)) || 'Untitled',
 		url,
-		summary: summarize(html),
+		// HN-style feeds use the description solely for a "Comments" link;
+		// that text is noise once we surface the real link on the card.
+		summary: commentsUrl && /^comments$/i.test(summary) ? '' : summary,
+		commentsUrl,
 		image: itemImage(item, html),
 		publishedAt: toIsoDate(text(item.pubDate) || text(item['dc:date']))
 	};
@@ -203,6 +209,7 @@ function atomItem(entry: Record<string, unknown>, feed: Feed, index: number): Ne
 		title: decodeEntities(text(entry.title)) || 'Untitled',
 		url,
 		summary: summarize(html),
+		commentsUrl: null,
 		image: itemImage(entry, html),
 		publishedAt: toIsoDate(text(entry.published) || text(entry.updated))
 	};

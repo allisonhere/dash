@@ -10,6 +10,7 @@
 		title: string;
 		url: string;
 		summary: string;
+		commentsUrl: string | null;
 		image: string | null;
 		publishedAt: string | null;
 	};
@@ -182,13 +183,27 @@
 					bind:value={search}
 					type="search"
 					placeholder="Search…"
-					class="w-full border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] py-2.5 pl-4 pr-10 text-sm outline-none backdrop-blur transition placeholder:text-[color-mix(in_srgb,var(--theme-fg)_38%,transparent)] focus:border-[var(--theme-accent)] focus:shadow-[0_0_20px_-6px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)] sm:w-56"
+					class="w-full border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] py-2.5 pl-4 pr-10 text-sm outline-none backdrop-blur transition placeholder:text-[color-mix(in_srgb,var(--theme-fg)_38%,transparent)] focus:border-[var(--theme-accent)] focus:shadow-[0_0_20px_-6px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)] sm:w-56 [&::-webkit-search-cancel-button]:hidden"
 				/>
-				<kbd
-					class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 border border-[color-mix(in_srgb,var(--theme-fg)_18%,transparent)] px-1.5 py-0.5 text-[10px] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]"
-				>
-					/
-				</kbd>
+				{#if search}
+					<button
+						type="button"
+						aria-label="Clear search"
+						onclick={() => {
+							search = '';
+							searchInput?.focus();
+						}}
+						class="absolute right-3 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center border border-[color-mix(in_srgb,var(--theme-fg)_18%,transparent)] text-xs leading-none text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-fg)]"
+					>
+						×
+					</button>
+				{:else}
+					<kbd
+						class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 border border-[color-mix(in_srgb,var(--theme-fg)_18%,transparent)] px-1.5 py-0.5 text-[10px] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]"
+					>
+						/
+					</kbd>
+				{/if}
 			</label>
 
 			<form
@@ -347,8 +362,20 @@
 							</p>
 						{/if}
 
-						<p class="mt-auto pt-1 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]">
-							{hostOf(item.url)}
+						<p
+							class="mt-auto flex items-center justify-between gap-2 pt-1 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]"
+						>
+							<span class="truncate">{hostOf(item.url)}</span>
+							{#if item.commentsUrl}
+								<a
+									href={item.commentsUrl}
+									target="_blank"
+									rel="noreferrer"
+									class="relative z-20 shrink-0 text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)] transition hover:text-[var(--cat)]"
+								>
+									Comments ↗
+								</a>
+							{/if}
 						</p>
 					</div>
 				</article>

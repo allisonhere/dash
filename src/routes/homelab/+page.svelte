@@ -7,7 +7,7 @@
 
 	let refreshing = $state(false);
 
-	// Auto-refresh the status every 30s while the tab is visible.
+	// Auto-refresh the status every 10s while the tab is visible.
 	$effect(() => {
 		const tick = () => {
 			if (!document.hidden) {
@@ -15,7 +15,7 @@
 			}
 		};
 
-		const timer = setInterval(tick, 30_000);
+		const timer = setInterval(tick, 10_000);
 		return () => clearInterval(timer);
 	});
 
@@ -99,14 +99,6 @@
 	function shortImage(image: string): string {
 		return image.replace(/^.*\//, '').replace(/:latest$/, '');
 	}
-
-	// SVG ring gauge geometry
-	const RADIUS = 26;
-	const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-	function dashOffset(percent: number): number {
-		return CIRCUMFERENCE * (1 - percent / 100);
-	}
 </script>
 
 <svelte:head>
@@ -141,26 +133,39 @@
 		</div>
 
 		{#if data.configured}
-			<form
-				method="POST"
-				action="?/refresh"
-				use:enhance={() => {
-					refreshing = true;
-					return async ({ update }) => {
-						await update();
-						refreshing = false;
-					};
-				}}
-			>
-				<button
-					type="submit"
-					disabled={refreshing}
-					class="border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-4 py-2.5 text-sm backdrop-blur transition hover:border-[var(--theme-accent)] disabled:opacity-60"
+			<div class="flex items-center gap-4">
+				<span
+					class="inline-flex items-center gap-2 text-xs text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]"
 				>
-					<span class={refreshing ? 'inline-block animate-spin' : 'inline-block'}>⟳</span>
-					{refreshing ? 'Refreshing…' : 'Refresh'}
-				</button>
-			</form>
+					<span class="relative flex h-2 w-2">
+						<span
+							class="absolute inline-flex h-full w-full animate-ping bg-[var(--theme-success)] opacity-60"
+						></span>
+						<span class="relative inline-flex h-2 w-2 bg-[var(--theme-success)]"></span>
+					</span>
+					Live · 10s
+				</span>
+				<form
+					method="POST"
+					action="?/refresh"
+					use:enhance={() => {
+						refreshing = true;
+						return async ({ update }) => {
+							await update();
+							refreshing = false;
+						};
+					}}
+				>
+					<button
+						type="submit"
+						disabled={refreshing}
+						class="border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-4 py-2.5 text-sm backdrop-blur transition hover:border-[var(--theme-accent)] disabled:opacity-60"
+					>
+						<span class={refreshing ? 'inline-block animate-spin' : 'inline-block'}>⟳</span>
+						{refreshing ? 'Refreshing…' : 'Refresh'}
+					</button>
+				</form>
+			</div>
 		{/if}
 	</header>
 
@@ -201,7 +206,7 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 		</section>
 	{:else}
 		{#if proxmox}
-			<section class="mt-8">
+			<section class="mt-6">
 				<div class="flex items-center gap-3">
 					<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
 						Proxmox · {proxmox.name}
@@ -227,66 +232,45 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 						{@const memPct = pct(node.memUsed, node.memTotal)}
 						{@const diskPct = pct(node.diskUsed, node.diskTotal)}
 						<div
-							class="mt-4 grid gap-6 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-5 backdrop-blur sm:grid-cols-[auto_1fr]"
+							class="mt-4 flex flex-wrap items-center gap-x-7 gap-y-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] px-4 py-2.5 backdrop-blur"
 						>
-							<div class="flex items-center gap-6">
-								{#each [{ label: 'CPU', value: cpuPct, sub: `${node.maxcpu} cores` }, { label: 'RAM', value: memPct, sub: `${bytes(node.memUsed)} / ${bytes(node.memTotal)}` }, { label: 'Disk', value: diskPct, sub: `${bytes(node.diskUsed)} / ${bytes(node.diskTotal)}` }] as gauge (gauge.label)}
-									<div class="flex flex-col items-center gap-2">
-										<div class="relative grid h-[68px] w-[68px] place-items-center">
-											<svg viewBox="0 0 64 64" class="h-full w-full -rotate-90">
-												<circle
-													cx="32"
-													cy="32"
-													r={RADIUS}
-													fill="none"
-													stroke="color-mix(in srgb, var(--theme-fg) 12%, transparent)"
-													stroke-width="6"
-												/>
-												<circle
-													cx="32"
-													cy="32"
-													r={RADIUS}
-													fill="none"
-													stroke={loadColor(gauge.value)}
-													stroke-width="6"
-													stroke-linecap="round"
-													stroke-dasharray={CIRCUMFERENCE}
-													stroke-dashoffset={dashOffset(gauge.value)}
-													style="transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease; filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 60%, transparent))"
-												/>
-											</svg>
-											<span class="absolute text-sm font-semibold">{gauge.value}%</span>
-										</div>
-										<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]">
-											{gauge.label}
-										</span>
-									</div>
-								{/each}
-							</div>
+							<span class="inline-flex items-center gap-2 text-sm font-medium">
+								<span
+									class={`h-1.5 w-1.5 ${node.status === 'online' ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[var(--theme-danger)]'}`}
+								></span>
+								{node.name}
+								<span class="text-xs font-normal text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+									up {duration(node.uptime)}
+								</span>
+							</span>
 
-							<dl class="grid grid-cols-2 content-center gap-x-6 gap-y-2 text-sm sm:border-l sm:border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] sm:pl-6">
-								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Node</dt>
-								<dd class="font-medium">{node.name}</dd>
-								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Status</dt>
-								<dd class="inline-flex items-center gap-2 font-medium capitalize">
-									<span class={`h-1.5 w-1.5 ${node.status === 'online' ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[var(--theme-danger)]'}`}></span>
-									{node.status}
-								</dd>
-								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Uptime</dt>
-								<dd class="font-medium">{duration(node.uptime)}</dd>
-								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Memory</dt>
-								<dd class="font-medium">{bytes(node.memUsed)} used</dd>
-							</dl>
+							{#each [{ label: 'CPU', value: cpuPct, sub: `${node.maxcpu}c` }, { label: 'RAM', value: memPct, sub: `${bytes(node.memUsed)} / ${bytes(node.memTotal)}` }, { label: 'Disk', value: diskPct, sub: `${bytes(node.diskUsed)} / ${bytes(node.diskTotal)}` }] as stat (stat.label)}
+								<span class="inline-flex items-center gap-2 text-xs">
+									<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">{stat.label}</span>
+									<span class="h-1 w-16 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
+										<span
+											class="block h-full transition-all duration-500"
+											style={`width: ${stat.value}%; background: ${loadColor(stat.value)}; box-shadow: 0 0 6px ${loadColor(stat.value)}`}
+										></span>
+									</span>
+									<span class="font-semibold tabular-nums" style={`color: ${loadColor(stat.value)}`}>
+										{stat.value}%
+									</span>
+									<span class="hidden text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] md:inline">
+										{stat.sub}
+									</span>
+								</span>
+							{/each}
 						</div>
 					{/each}
 
 					{#if proxmox.guests.length}
-						<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+						<div class="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 							{#each proxmox.guests as guest (guest.id)}
 								{@const running = guest.status === 'running'}
 								{@const memPct = pct(guest.memUsed, guest.memTotal)}
 								<article
-									class={`relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] p-3 backdrop-blur transition-all duration-200 ${running ? 'hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--theme-accent)_50%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]' : 'opacity-60'}`}
+									class={`relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] p-2.5 backdrop-blur transition-all duration-200 ${running ? 'hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--theme-accent)_50%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]' : 'opacity-60'}`}
 								>
 									<div class="flex items-center gap-2">
 										<span
@@ -327,7 +311,7 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 		{/if}
 
 		{#each dockerHosts as host (host.name)}
-			<section class="mt-8">
+			<section class="mt-6">
 				<div class="flex items-center gap-3">
 					<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-color12,var(--theme-accent))]">
 						Docker · {host.name}
@@ -350,23 +334,33 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 				{:else}
 					{#if host.host}
 						{@const memPct = pct(host.host.memUsed, host.host.memTotal)}
-						<dl class="mt-4 flex flex-wrap gap-x-8 gap-y-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-4 py-3 text-sm backdrop-blur">
-							<div class="flex items-center gap-2">
-								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Load</dt>
-								<dd class="font-medium">{host.host.load.map((n) => n.toFixed(2)).join(' ')}</dd>
-							</div>
-							<div class="flex items-center gap-2">
-								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Memory</dt>
-								<dd class="font-medium">
+						<div
+							class="mt-4 flex flex-wrap items-center gap-x-7 gap-y-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-4 py-2.5 backdrop-blur"
+						>
+							<span class="inline-flex items-center gap-2 text-xs">
+								<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Load</span>
+								<span class="text-xs font-semibold tabular-nums">
+									{host.host.load.map((n) => n.toFixed(2)).join(' ')}
+								</span>
+							</span>
+							<span class="inline-flex items-center gap-2 text-xs">
+								<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">RAM</span>
+								<span class="h-1 w-16 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
+									<span
+										class="block h-full transition-all duration-500"
+										style={`width: ${memPct}%; background: ${loadColor(memPct)}; box-shadow: 0 0 6px ${loadColor(memPct)}`}
+									></span>
+								</span>
+								<span class="font-semibold tabular-nums" style={`color: ${loadColor(memPct)}`}>{memPct}%</span>
+								<span class="hidden text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] md:inline">
 									{bytes(host.host.memUsed)} / {bytes(host.host.memTotal)}
-									<span style={`color: ${loadColor(memPct)}`}>({memPct}%)</span>
-								</dd>
-							</div>
-							<div class="flex items-center gap-2">
-								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Uptime</dt>
-								<dd class="font-medium">{host.host.uptime}</dd>
-							</div>
-						</dl>
+								</span>
+							</span>
+							<span class="inline-flex items-center gap-2 text-xs">
+								<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Uptime</span>
+								<span class="font-semibold">{host.host.uptime}</span>
+							</span>
+						</div>
 					{/if}
 
 					<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -375,7 +369,7 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 							{@const memPct = pct(container.memUsed, container.memLimit)}
 							{@const healthy = /\(healthy\)/.test(container.status)}
 							<article
-								class={`relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] p-3 backdrop-blur transition-all duration-200 ${running ? 'hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_60%,transparent)]' : 'opacity-60'}`}
+								class={`relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] p-2.5 backdrop-blur transition-all duration-200 ${running ? 'hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_60%,transparent)]' : 'opacity-60'}`}
 							>
 								<div class="flex items-center gap-2">
 									<span

@@ -8,7 +8,9 @@ export type HomelabStatus = {
 	dockerHosts: DockerHostStatus[];
 };
 
-const CACHE_TTL_MS = 20_000;
+// Shorter than the client's 10s poll so every poll sees fresh numbers; still
+// coalesces bursts from multiple tabs into one Proxmox/SSH round trip.
+const CACHE_TTL_MS = 8_000;
 
 let cache: { fetchedAt: number; status: HomelabStatus } | null = null;
 
