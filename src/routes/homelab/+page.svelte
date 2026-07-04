@@ -99,6 +99,14 @@
 	function shortImage(image: string): string {
 		return image.replace(/^.*\//, '').replace(/:latest$/, '');
 	}
+
+	// SVG ring gauge geometry
+	const RADIUS = 26;
+	const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+	function dashOffset(percent: number): number {
+		return CIRCUMFERENCE * (1 - percent / 100);
+	}
 </script>
 
 <svelte:head>
@@ -232,77 +240,96 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 						{@const memPct = pct(node.memUsed, node.memTotal)}
 						{@const diskPct = pct(node.diskUsed, node.diskTotal)}
 						<div
-							class="mt-4 flex flex-wrap items-center gap-x-7 gap-y-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] px-4 py-2.5 backdrop-blur"
+							class="mt-4 grid gap-6 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-5 backdrop-blur sm:grid-cols-[auto_1fr]"
 						>
-							<span class="inline-flex items-center gap-2 text-sm font-medium">
-								<span
-									class={`h-1.5 w-1.5 ${node.status === 'online' ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[var(--theme-danger)]'}`}
-								></span>
-								{node.name}
-								<span class="text-xs font-normal text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
-									up {duration(node.uptime)}
-								</span>
-							</span>
+							<div class="flex items-center gap-6">
+								{#each [{ label: 'CPU', value: cpuPct, sub: `${node.maxcpu} cores` }, { label: 'RAM', value: memPct, sub: `${bytes(node.memUsed)} / ${bytes(node.memTotal)}` }, { label: 'Disk', value: diskPct, sub: `${bytes(node.diskUsed)} / ${bytes(node.diskTotal)}` }] as gauge (gauge.label)}
+									<div class="flex flex-col items-center gap-2">
+										<div class="relative grid h-[68px] w-[68px] place-items-center">
+											<svg viewBox="0 0 64 64" class="h-full w-full -rotate-90">
+												<circle
+													cx="32"
+													cy="32"
+													r={RADIUS}
+													fill="none"
+													stroke="color-mix(in srgb, var(--theme-fg) 12%, transparent)"
+													stroke-width="6"
+												/>
+												<circle
+													cx="32"
+													cy="32"
+													r={RADIUS}
+													fill="none"
+													stroke={loadColor(gauge.value)}
+													stroke-width="6"
+													stroke-linecap="round"
+													stroke-dasharray={CIRCUMFERENCE}
+													stroke-dashoffset={dashOffset(gauge.value)}
+													style="transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease; filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 60%, transparent))"
+												/>
+											</svg>
+											<span class="absolute text-sm font-semibold">{gauge.value}%</span>
+										</div>
+										<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]">
+											{gauge.label}
+										</span>
+									</div>
+								{/each}
+							</div>
 
-							{#each [{ label: 'CPU', value: cpuPct, sub: `${node.maxcpu}c` }, { label: 'RAM', value: memPct, sub: `${bytes(node.memUsed)} / ${bytes(node.memTotal)}` }, { label: 'Disk', value: diskPct, sub: `${bytes(node.diskUsed)} / ${bytes(node.diskTotal)}` }] as stat (stat.label)}
-								<span class="inline-flex items-center gap-2 text-xs">
-									<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">{stat.label}</span>
-									<span class="h-1 w-16 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
-										<span
-											class="block h-full transition-all duration-500"
-											style={`width: ${stat.value}%; background: ${loadColor(stat.value)}; box-shadow: 0 0 6px ${loadColor(stat.value)}`}
-										></span>
-									</span>
-									<span class="font-semibold tabular-nums" style={`color: ${loadColor(stat.value)}`}>
-										{stat.value}%
-									</span>
-									<span class="hidden text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] md:inline">
-										{stat.sub}
-									</span>
-								</span>
-							{/each}
+							<dl class="grid grid-cols-2 content-center gap-x-6 gap-y-2 text-sm sm:border-l sm:border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] sm:pl-6">
+								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Node</dt>
+								<dd class="font-medium">{node.name}</dd>
+								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Status</dt>
+								<dd class="inline-flex items-center gap-2 font-medium capitalize">
+									<span class={`h-1.5 w-1.5 ${node.status === 'online' ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[var(--theme-danger)]'}`}></span>
+									{node.status}
+								</dd>
+								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Uptime</dt>
+								<dd class="font-medium">{duration(node.uptime)}</dd>
+								<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Memory</dt>
+								<dd class="font-medium">{bytes(node.memUsed)} used</dd>
+							</dl>
 						</div>
 					{/each}
 
 					{#if proxmox.guests.length}
-						<div class="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+						<div class="mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
 							{#each proxmox.guests as guest (guest.id)}
 								{@const running = guest.status === 'running'}
 								{@const memPct = pct(guest.memUsed, guest.memTotal)}
-								<article
-									class={`relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] p-2.5 backdrop-blur transition-all duration-200 ${running ? 'hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--theme-accent)_50%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]' : 'opacity-60'}`}
+								<div
+									title={running ? `${guest.name} · ${bytes(guest.memUsed)} / ${bytes(guest.memTotal)}` : `Stopped · #${guest.vmid}`}
+									class={`flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${running ? 'hover:border-[color-mix(in_srgb,var(--theme-accent)_50%,transparent)]' : 'opacity-55'}`}
 								>
-									<div class="flex items-center gap-2">
-										<span
-											class={`h-2 w-2 shrink-0 ${running ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'}`}
-										></span>
-										<h3 class="min-w-0 flex-1 truncate text-sm font-semibold">{guest.name}</h3>
-										<span
-											class="shrink-0 border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)]"
-										>
-											{guest.type === 'qemu' ? 'VM' : 'LXC'}
-										</span>
-									</div>
-
+									<span
+										class={`h-1.5 w-1.5 shrink-0 ${running ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'}`}
+									></span>
+									<span class="min-w-0 flex-1 truncate text-sm font-medium">{guest.name}</span>
+									<span
+										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)]"
+									>
+										{guest.type === 'qemu' ? 'VM' : 'LXC'}
+									</span>
 									{#if running}
-										<div class="mt-2.5 space-y-1.5">
-											<div class="flex items-center justify-between text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
-												<span>CPU {Math.round(guest.cpu * 100)}%</span>
-												<span>{bytes(guest.memUsed)} / {bytes(guest.memTotal)}</span>
-											</div>
-											<div class="h-1 w-full overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
-												<div
-													class="h-full transition-all duration-500"
-													style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
-												></div>
-											</div>
-										</div>
+										<span class="shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
+											{Math.round(guest.cpu * 100)}%
+										</span>
+										<span class="h-1 w-10 shrink-0 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
+											<span
+												class="block h-full transition-all duration-500"
+												style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
+											></span>
+										</span>
+										<span class="hidden shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)] md:inline">
+											{bytes(guest.memUsed)}
+										</span>
 									{:else}
-										<p class="mt-2.5 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
-											Stopped · #{guest.vmid}
-										</p>
+										<span class="shrink-0 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
+											stopped
+										</span>
 									{/if}
-								</article>
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -363,47 +390,41 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 						</div>
 					{/if}
 
-					<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					<div class="mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
 						{#each host.containers as container (container.name)}
 							{@const running = container.state === 'running'}
 							{@const memPct = pct(container.memUsed, container.memLimit)}
 							{@const healthy = /\(healthy\)/.test(container.status)}
-							<article
-								class={`relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] p-2.5 backdrop-blur transition-all duration-200 ${running ? 'hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_60%,transparent)]' : 'opacity-60'}`}
+							<div
+								title={`${container.image} · ${container.status || 'Stopped'}`}
+								class={`flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${running ? 'hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)]' : 'opacity-55'}`}
 							>
-								<div class="flex items-center gap-2">
-									<span
-										class={`h-2 w-2 shrink-0 ${running ? (healthy ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[var(--theme-color12,var(--theme-accent))] shadow-[0_0_8px_var(--theme-color12,var(--theme-accent))]') : 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'}`}
-									></span>
-									<h3 class="min-w-0 flex-1 truncate text-sm font-semibold">{container.name}</h3>
-								</div>
-
-								<p class="mt-1 truncate text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_48%,transparent)]">
+								<span
+									class={`h-1.5 w-1.5 shrink-0 ${running ? (healthy ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[var(--theme-color12,var(--theme-accent))] shadow-[0_0_8px_var(--theme-color12,var(--theme-accent))]') : 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'}`}
+								></span>
+								<span class="min-w-0 flex-1 truncate text-sm font-medium">{container.name}</span>
+								<span class="hidden max-w-32 shrink-0 truncate text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] lg:inline">
 									{shortImage(container.image)}
-								</p>
-
+								</span>
 								{#if running}
-									<div class="mt-2 space-y-1.5">
-										<div class="flex items-center justify-between text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
-											<span>CPU {container.cpu.toFixed(1)}%</span>
-											<span>{bytes(container.memUsed)}</span>
-										</div>
-										<div class="h-1 w-full overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
-											<div
-												class="h-full transition-all duration-500"
-												style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
-											></div>
-										</div>
-										<p class="text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
-											{container.status}
-										</p>
-									</div>
+									<span class="shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
+										{container.cpu.toFixed(1)}%
+									</span>
+									<span class="h-1 w-10 shrink-0 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
+										<span
+											class="block h-full transition-all duration-500"
+											style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
+										></span>
+									</span>
+									<span class="hidden shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)] md:inline">
+										{bytes(container.memUsed)}
+									</span>
 								{:else}
-									<p class="mt-2 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
-										{container.status || 'Stopped'}
-									</p>
+									<span class="shrink-0 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
+										stopped
+									</span>
 								{/if}
-							</article>
+							</div>
 						{/each}
 					</div>
 				{/if}
