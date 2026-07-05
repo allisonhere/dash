@@ -30,6 +30,42 @@ docker compose up -d --build
 
 Open `http://<host-ip>:3939` from any device on the LAN.
 
+## Update it from this repo
+
+From your local checkout:
+
+```bash
+./deploy.sh full
+```
+
+That runs the local Svelte checks, builds the production bundle, validates the
+Compose file, commits any local changes, pushes `master` to GitHub, then tells
+`jarvis:~/dash` to pull and rebuild:
+
+```bash
+cd ~/dash
+git pull --ff-only origin master
+docker compose up -d --build
+```
+
+Useful focused commands:
+
+```bash
+./deploy.sh status
+./deploy.sh check
+./deploy.sh deploy
+./deploy.sh verify
+```
+
+Defaults can be overridden without editing the script:
+
+```bash
+DASH_DEPLOY_HOST=jarvis \
+DASH_REMOTE_DIR=~/dash \
+DASH_URL=http://192.168.86.74:3939 \
+./deploy.sh full
+```
+
 Key points in `compose.yaml`:
 - The app trusts all CSRF origins because it is intended for LAN-only use and may
   be reached by IP, hostname, or reverse-proxy name. Restrict `csrf.trustedOrigins`
