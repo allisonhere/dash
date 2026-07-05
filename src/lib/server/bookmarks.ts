@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { listRecentBookmarks as listRecent, markBookmarkVisited } from '$lib/bookmark-recency.js';
 import { readCollection, writeCollection } from './store';
 
 export type Bookmark = {
@@ -7,9 +8,11 @@ export type Bookmark = {
 	url: string;
 	category: string;
 	icon: string;
+	lastUsedAt?: string;
+	useCount?: number;
 };
 
-export type BookmarkInput = Omit<Bookmark, 'id'>;
+export type BookmarkInput = Pick<Bookmark, 'title' | 'url' | 'category' | 'icon'>;
 
 const DEFAULT_CATEGORY = 'General';
 const DEFAULT_ICON = '↗';
@@ -42,10 +45,31 @@ export async function updateBookmark(id: string, input: BookmarkInput) {
 		return null;
 	}
 
-	const updated = { id, ...input };
+	const existing = bookmarks[index];
+	const updated = {
+		...existing,
+		...input,
+		id
+	};
 	bookmarks[index] = updated;
 	await writeBookmarks(bookmarks);
 	return updated;
+}
+
+export async function recordBookmarkVisit(id: string) {
+	const bookmarks = await listBookmarks();
+	const result = markBookmarkVisited(bookmarks, id);
+
+	if (!result.updated) {
+		return null;
+	}
+
+	await writeBookmarks(result.bookmarks);
+	return result.bookmarks.find((bookmark) => bookmark.id === id) ?? null;
+}
+
+export function listRecentBookmarks(bookmarks: Bookmark[], limit = 8): Bookmark[] {
+	return listRecent(bookmarks, limit);
 }
 
 export async function deleteBookmark(id: string) {
@@ -92,7 +116,9 @@ function isBookmark(value: unknown): value is Bookmark {
 		typeof bookmark.title === 'string' &&
 		typeof bookmark.url === 'string' &&
 		typeof bookmark.category === 'string' &&
-		typeof bookmark.icon === 'string'
+		typeof bookmark.icon === 'string' &&
+		(bookmark.lastUsedAt === undefined || typeof bookmark.lastUsedAt === 'string') &&
+		(bookmark.useCount === undefined || typeof bookmark.useCount === 'number')
 	);
 }
 

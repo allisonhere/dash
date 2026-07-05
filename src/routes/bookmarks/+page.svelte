@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { hostOf, iconCandidatesForBookmark } from '$lib/dashboard-icons.js';
-	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
 
 	type Bookmark = {
@@ -10,6 +9,8 @@
 		url: string;
 		category: string;
 		icon: string;
+		lastUsedAt?: string;
+		useCount?: number;
 	};
 
 	let { data, form }: { data: import('./$types').PageData; form: import('./$types').ActionData } =
@@ -23,6 +24,7 @@
 	let searchInput = $state<HTMLInputElement>();
 	let loadedFavicons = $state<Record<string, boolean>>({});
 	let failedIconAttempts = $state<Record<string, number>>({});
+	let recentVisitTimes = $state<Record<string, string>>({});
 
 	let draftTitle = $state('');
 	let draftUrl = $state('');
@@ -62,6 +64,13 @@
 			.filter((group) => group.bookmarks.length > 0)
 	);
 
+	const recentBookmarks = $derived(
+		data.bookmarks
+			.filter((bookmark) => effectiveLastUsedAt(bookmark) !== '')
+			.toSorted((left, right) => Date.parse(effectiveLastUsedAt(right)) - Date.parse(effectiveLastUsedAt(left)))
+			.slice(0, 8)
+	);
+
 	const PALETTE = [
 		'--theme-accent',
 		'--theme-color12',
@@ -97,6 +106,27 @@
 		const nextAttempt = (failedIconAttempts[bookmark.id] ?? 0) + 1;
 		failedIconAttempts[bookmark.id] = nextAttempt;
 		loadedFavicons[bookmark.id] = false;
+	}
+
+	function effectiveLastUsedAt(bookmark: Bookmark) {
+		return recentVisitTimes[bookmark.id] ?? bookmark.lastUsedAt ?? '';
+	}
+
+	function trackBookmarkVisit(bookmark: Bookmark) {
+		recentVisitTimes[bookmark.id] = new Date().toISOString();
+
+		const body = new FormData();
+		body.set('id', bookmark.id);
+
+		if (navigator.sendBeacon?.('?/visit', body)) {
+			return;
+		}
+
+		void fetch('?/visit', {
+			method: 'POST',
+			body,
+			keepalive: true
+		});
 	}
 
 	function openCreate() {
@@ -175,6 +205,90 @@
 </svelte:head>
 
 <svelte:window onkeydown={onKeydown} />
+
+{#snippet bookmarkCard(bookmark: Bookmark, accent: string)}
+	<article
+		style={`--cat: ${accent}`}
+		in:fade={{ duration: 150 }}
+		class="group/card relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-2.5 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--cat)_55%,transparent)] hover:bg-[color-mix(in_srgb,var(--theme-panel)_80%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--cat)_65%,transparent)]"
+	>
+		<div
+			class="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[color-mix(in_srgb,var(--cat)_70%,transparent)] to-transparent opacity-0 transition duration-200 group-hover/card:opacity-100"
+		></div>
+
+		<a
+			href={bookmark.url}
+			target="_blank"
+			rel="noreferrer"
+			class="absolute inset-0 z-0"
+			aria-label={`Open ${bookmark.title}`}
+			onclick={() => trackBookmarkVisit(bookmark)}
+		></a>
+
+		<div class="pointer-events-none flex items-center gap-3">
+			<div
+				class="relative grid h-9 w-9 shrink-0 place-items-center border border-[color-mix(in_srgb,var(--cat)_35%,transparent)] bg-[color-mix(in_srgb,var(--cat)_13%,transparent)] transition duration-200 group-hover/card:scale-105 group-hover/card:shadow-[0_0_18px_-4px_color-mix(in_srgb,var(--cat)_70%,transparent)]"
+			>
+				{#if !loadedFavicons[bookmark.id]}
+					<span class="text-base">{fallbackIconText(bookmark.icon)}</span>
+				{/if}
+				{#if activeIconUrl(bookmark)}
+					<img
+						src={activeIconUrl(bookmark)}
+						alt=""
+						loading="lazy"
+						class={`absolute h-5 w-5 transition ${loadedFavicons[bookmark.id] ? 'opacity-100' : 'opacity-0'}`}
+						onload={() => (loadedFavicons[bookmark.id] = true)}
+						onerror={() => tryNextIcon(bookmark)}
+					/>
+				{/if}
+			</div>
+
+			<div class="min-w-0 flex-1">
+				<h3 class="truncate text-sm font-semibold text-[var(--theme-fg)]">
+					{bookmark.title}
+				</h3>
+				<p class="truncate text-xs text-[color-mix(in_srgb,var(--theme-fg)_52%,transparent)]">
+					{hostOf(bookmark.url) || bookmark.url}
+				</p>
+			</div>
+
+			<span
+				class="pr-1 text-[color-mix(in_srgb,var(--theme-fg)_35%,transparent)] transition duration-200 group-hover/card:opacity-0"
+				aria-hidden="true"
+			>
+				↗
+			</span>
+		</div>
+
+		<div
+			class="absolute inset-y-0 right-2.5 z-10 flex items-center gap-1.5 opacity-0 transition duration-150 focus-within:opacity-100 group-hover/card:opacity-100"
+		>
+			<button
+				type="button"
+				onclick={() => openEdit(bookmark)}
+				class="border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] px-2 py-1 text-xs text-[color-mix(in_srgb,var(--theme-fg)_80%,transparent)] backdrop-blur transition hover:border-[var(--cat)] hover:text-[var(--theme-fg)]"
+			>
+				Edit
+			</button>
+
+			<form method="POST" action="?/delete" use:enhance>
+				<input type="hidden" name="id" value={bookmark.id} />
+				<button
+					type="submit"
+					onclick={(event) => requestDelete(event, bookmark.id)}
+					class={`border px-2 py-1 text-xs backdrop-blur transition ${
+						confirmingDelete === bookmark.id
+							? 'border-[var(--theme-danger)] bg-[color-mix(in_srgb,var(--theme-danger)_22%,transparent)] text-[var(--theme-fg)]'
+							: 'border-[color-mix(in_srgb,var(--theme-danger)_40%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] text-[var(--theme-danger)] hover:bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)]'
+					}`}
+				>
+					{confirmingDelete === bookmark.id ? 'Sure?' : 'Delete'}
+				</button>
+			</form>
+		</div>
+	</article>
+{/snippet}
 
 <main class="mx-auto min-h-dvh w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 	<header class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -274,6 +388,26 @@
 		</nav>
 	{/if}
 
+	{#if recentBookmarks.length > 0}
+		<section class="mt-7" aria-label="Recently opened bookmarks">
+			<div class="flex items-center gap-3">
+				<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
+					Recent
+				</h2>
+				<span class="text-xs text-[color-mix(in_srgb,var(--theme-fg)_42%,transparent)]">
+					{recentBookmarks.length}
+				</span>
+				<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] to-transparent"></div>
+			</div>
+
+			<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+				{#each recentBookmarks as bookmark (bookmark.id)}
+					{@render bookmarkCard(bookmark, 'var(--theme-accent)')}
+				{/each}
+			</div>
+		</section>
+	{/if}
+
 	{#if data.bookmarks.length === 0}
 		<section
 			class="mt-10 grid place-items-center border border-dashed border-[color-mix(in_srgb,var(--theme-fg)_18%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_40%,transparent)] px-6 py-20 text-center"
@@ -319,86 +453,7 @@
 
 				<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 					{#each group.bookmarks as bookmark (bookmark.id)}
-						<article
-							animate:flip={{ duration: 160 }}
-							in:fade={{ duration: 150 }}
-							class="group/card relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-2.5 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--cat)_55%,transparent)] hover:bg-[color-mix(in_srgb,var(--theme-panel)_80%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--cat)_65%,transparent)]"
-						>
-							<div
-								class="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[color-mix(in_srgb,var(--cat)_70%,transparent)] to-transparent opacity-0 transition duration-200 group-hover/card:opacity-100"
-							></div>
-
-							<a
-								href={bookmark.url}
-								target="_blank"
-								rel="noreferrer"
-								class="absolute inset-0"
-								aria-label={`Open ${bookmark.title}`}
-							></a>
-
-							<div class="pointer-events-none flex items-center gap-3">
-								<div
-									class="relative grid h-9 w-9 shrink-0 place-items-center border border-[color-mix(in_srgb,var(--cat)_35%,transparent)] bg-[color-mix(in_srgb,var(--cat)_13%,transparent)] transition duration-200 group-hover/card:scale-105 group-hover/card:shadow-[0_0_18px_-4px_color-mix(in_srgb,var(--cat)_70%,transparent)]"
-								>
-									{#if !loadedFavicons[bookmark.id]}
-										<span class="text-base">{fallbackIconText(bookmark.icon)}</span>
-									{/if}
-									{#if activeIconUrl(bookmark)}
-										<img
-											src={activeIconUrl(bookmark)}
-											alt=""
-											loading="lazy"
-											class={`absolute h-5 w-5 transition ${loadedFavicons[bookmark.id] ? 'opacity-100' : 'opacity-0'}`}
-											onload={() => (loadedFavicons[bookmark.id] = true)}
-											onerror={() => tryNextIcon(bookmark)}
-										/>
-									{/if}
-								</div>
-
-								<div class="min-w-0 flex-1">
-									<h3 class="truncate text-sm font-semibold text-[var(--theme-fg)]">
-										{bookmark.title}
-									</h3>
-									<p class="truncate text-xs text-[color-mix(in_srgb,var(--theme-fg)_52%,transparent)]">
-										{hostOf(bookmark.url) || bookmark.url}
-									</p>
-								</div>
-
-								<span
-									class="pr-1 text-[color-mix(in_srgb,var(--theme-fg)_35%,transparent)] transition duration-200 group-hover/card:opacity-0"
-									aria-hidden="true"
-								>
-									↗
-								</span>
-							</div>
-
-							<div
-								class="absolute inset-y-0 right-2.5 flex items-center gap-1.5 opacity-0 transition duration-150 focus-within:opacity-100 group-hover/card:opacity-100"
-							>
-								<button
-									type="button"
-									onclick={() => openEdit(bookmark)}
-									class="border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] px-2 py-1 text-xs text-[color-mix(in_srgb,var(--theme-fg)_80%,transparent)] backdrop-blur transition hover:border-[var(--cat)] hover:text-[var(--theme-fg)]"
-								>
-									Edit
-								</button>
-
-								<form method="POST" action="?/delete" use:enhance>
-									<input type="hidden" name="id" value={bookmark.id} />
-									<button
-										type="submit"
-										onclick={(event) => requestDelete(event, bookmark.id)}
-										class={`border px-2 py-1 text-xs backdrop-blur transition ${
-											confirmingDelete === bookmark.id
-												? 'border-[var(--theme-danger)] bg-[color-mix(in_srgb,var(--theme-danger)_22%,transparent)] text-[var(--theme-fg)]'
-												: 'border-[color-mix(in_srgb,var(--theme-danger)_40%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] text-[var(--theme-danger)] hover:bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)]'
-										}`}
-									>
-										{confirmingDelete === bookmark.id ? 'Sure?' : 'Delete'}
-									</button>
-								</form>
-							</div>
-						</article>
+						{@render bookmarkCard(bookmark, categoryColor(group.category))}
 					{/each}
 				</div>
 			</section>

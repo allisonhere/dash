@@ -4,6 +4,7 @@ import {
 	createBookmark,
 	deleteBookmark,
 	listBookmarks,
+	recordBookmarkVisit,
 	updateBookmark
 } from '$lib/server/bookmarks';
 
@@ -51,6 +52,18 @@ export const actions = {
 		}
 
 		return { ok: true, intent: 'delete', id };
+	},
+
+	visit: async ({ request }) => {
+		const formData = await request.formData();
+		const id = String(formData.get('id') ?? '');
+		const bookmark = await recordBookmarkVisit(id);
+
+		if (!bookmark) {
+			return fail(404, { ok: false, intent: 'visit', message: 'Bookmark was not found.' });
+		}
+
+		return { ok: true, intent: 'visit', bookmark };
 	}
 };
 

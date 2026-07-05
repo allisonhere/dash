@@ -2,7 +2,7 @@
 set -euo pipefail
 
 RED='\033[0;31m'
-GREEN='\033[0;32m'
+PURPLE='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
@@ -27,7 +27,7 @@ print_header() {
     clear
   fi
   echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${BLUE}║${NC}              ${BOLD}${CYAN}Dash Docker Deploy${NC}                         ${BLUE}║${NC}"
+  echo -e "${BLUE}║${NC}                    ${BOLD}${CYAN}Dash Docker Deploy${NC}                      ${BLUE}║${NC}"
   echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
   echo ""
 }
@@ -47,7 +47,7 @@ print_substep() { echo -e "  ${DIM}→${NC} $1"; }
 
 print_success() {
   local elapsed=$(($(date +%s) - STEP_START))
-  echo -e "  ${GREEN}✓${NC} $1 ${DIM}(${elapsed}s)${NC}"
+  echo -e "  ${PURPLE}✓${NC} $1 ${DIM}(${elapsed}s)${NC}"
 }
 
 print_error() { echo -e "  ${RED}✗${NC} $1" >&2; }
@@ -124,7 +124,7 @@ status_report() {
   if [ "$changes" -gt 0 ]; then
     echo -e "  ${BOLD}Git:${NC}      ${YELLOW}$changes uncommitted change(s)${NC}"
   else
-    echo -e "  ${BOLD}Git:${NC}      ${GREEN}clean${NC}"
+    echo -e "  ${BOLD}Git:${NC}      ${PURPLE}clean${NC}"
   fi
   echo -e "  ${BOLD}Host:${NC}     $DASH_DEPLOY_HOST"
   echo -e "  ${BOLD}Path:${NC}     $DASH_REMOTE_DIR"
@@ -294,9 +294,9 @@ run_full() {
 
   local total_time
   total_time=$(($(date +%s) - TOTAL_START))
-  echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  echo -e "${BOLD}${GREEN}  ✓ Dash deploy complete${NC} ${DIM}($(format_time "$total_time"))${NC}"
-  echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+  echo -e "\n${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BOLD}${PURPLE}  ✓ Dash deploy complete${NC} ${DIM}($(format_time "$total_time"))${NC}"
+  echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 }
 
 show_menu() {
@@ -311,25 +311,25 @@ show_menu() {
     echo "   4) Push to GitHub"
     echo "   5) Deploy Docker on $DASH_DEPLOY_HOST"
     echo "   6) Verify $DASH_URL"
-    echo -e "   7) ${GREEN}Full deploy (recommended)${NC}"
+    echo -e "   7) ${PURPLE}Full deploy (recommended)${NC}"
     echo ""
     echo "   0) Exit"
     echo ""
     read -r -p "  Choose [0-7]: " choice
 
     case "$choice" in
-      1) run_status ;;
-      2) run_check ;;
-      3) run_commit ;;
-      4) run_push ;;
-      5) run_deploy ;;
-      6) run_verify ;;
-      7) run_full ;;
-      0)
-        echo -e "\n  ${DIM}Bye.${NC}\n"
-        exit 0
-        ;;
-      *) print_error "Invalid choice" ;;
+    1) run_status ;;
+    2) run_check ;;
+    3) run_commit ;;
+    4) run_push ;;
+    5) run_deploy ;;
+    6) run_verify ;;
+    7) run_full ;;
+    0)
+      echo -e "\n  ${DIM}Bye.${NC}\n"
+      exit 0
+      ;;
+    *) print_error "Invalid choice" ;;
     esac
 
     echo ""
@@ -358,21 +358,21 @@ main() {
   local action="${1:-menu}"
 
   case "$action" in
-    menu) show_menu ;;
-    status) run_status ;;
-    check) run_check ;;
-    commit) run_commit ;;
-    push) run_push ;;
-    deploy) run_deploy ;;
-    verify) run_verify ;;
-    full) run_full ;;
-    -h|--help|help) usage ;;
-    *)
-      usage
-      echo ""
-      print_error "Unknown action: $action"
-      exit 2
-      ;;
+  menu) show_menu ;;
+  status) run_status ;;
+  check) run_check ;;
+  commit) run_commit ;;
+  push) run_push ;;
+  deploy) run_deploy ;;
+  verify) run_verify ;;
+  full) run_full ;;
+  -h | --help | help) usage ;;
+  *)
+    usage
+    echo ""
+    print_error "Unknown action: $action"
+    exit 2
+    ;;
   esac
 }
 
