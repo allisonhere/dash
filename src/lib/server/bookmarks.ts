@@ -10,12 +10,15 @@ export type Bookmark = {
 	icon: string;
 	lastUsedAt?: string;
 	useCount?: number;
+	pinnedAt?: string;
 };
 
 export type BookmarkInput = Pick<Bookmark, 'title' | 'url' | 'category' | 'icon'>;
 
 const DEFAULT_CATEGORY = 'General';
 const DEFAULT_ICON = '↗';
+
+export const MAX_PINNED = 4;
 
 export async function listBookmarks(): Promise<Bookmark[]> {
 	const parsed = await readCollection<unknown>('bookmarks');
@@ -70,6 +73,39 @@ export async function recordBookmarkVisit(id: string) {
 
 export function listRecentBookmarks(bookmarks: Bookmark[], limit = 8): Bookmark[] {
 	return listRecent(bookmarks, limit);
+}
+
+// Pinned bookmarks keep the order they were pinned in, oldest first, so pinning
+// a new one appends rather than reshuffling the row.
+export function listPinnedBookmarks(bookmarks: Bookmark[]): Bookmark[] {
+	return bookmarks
+		.filter((bookmark) => Boolean(bookmark.pinnedAt))
+		.sort((left, right) => Date.parse(left.pinnedAt ?? '') - Date.parse(right.pinnedAt ?? ''))
+		.slice(0, MAX_PINNED);
+}
+
+export async function toggleBookmarkPin(id: string) {
+	const bookmarks = await listBookmarks();
+	const bookmark = bookmarks.find((candidate) => candidate.id === id);
+
+	if (!bookmark) {
+		return null;
+	}
+
+	if (bookmark.pinnedAt) {
+		delete bookmark.pinnedAt;
+	} else {
+		const pinned = bookmarks.filter((candidate) => candidate.pinnedAt).length;
+
+		if (pinned >= MAX_PINNED) {
+			throw new Error(`You can pin up to ${MAX_PINNED} bookmarks. Unpin one first.`);
+		}
+
+		bookmark.pinnedAt = new Date().toISOString();
+	}
+
+	await writeBookmarks(bookmarks);
+	return bookmark;
 }
 
 // Bookmarks reference their group by name, so renaming or deleting a group has
@@ -140,7 +176,8 @@ function isBookmark(value: unknown): value is Bookmark {
 		typeof bookmark.category === 'string' &&
 		typeof bookmark.icon === 'string' &&
 		(bookmark.lastUsedAt === undefined || typeof bookmark.lastUsedAt === 'string') &&
-		(bookmark.useCount === undefined || typeof bookmark.useCount === 'number')
+		(bookmark.useCount === undefined || typeof bookmark.useCount === 'number') &&
+		(bookmark.pinnedAt === undefined || typeof bookmark.pinnedAt === 'string')
 	);
 }
 

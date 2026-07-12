@@ -12,6 +12,7 @@
 		icon: string;
 		lastUsedAt?: string;
 		useCount?: number;
+		pinnedAt?: string;
 	};
 
 	let { data, form }: { data: import('./$types').PageData; form: import('./$types').ActionData } =
@@ -68,9 +69,18 @@
 			.filter((group) => group.bookmarks.length > 0)
 	);
 
+	const MAX_PINNED = 4;
+
+	const pinnedBookmarks = $derived(
+		data.bookmarks
+			.filter((bookmark) => Boolean(bookmark.pinnedAt))
+			.toSorted((left, right) => Date.parse(left.pinnedAt ?? '') - Date.parse(right.pinnedAt ?? ''))
+			.slice(0, MAX_PINNED)
+	);
+
 	const recentBookmarks = $derived(
 		data.bookmarks
-			.filter((bookmark) => effectiveLastUsedAt(bookmark) !== '')
+			.filter((bookmark) => !bookmark.pinnedAt && effectiveLastUsedAt(bookmark) !== '')
 			.toSorted((left, right) => Date.parse(effectiveLastUsedAt(right)) - Date.parse(effectiveLastUsedAt(left)))
 			.slice(0, 8)
 	);
@@ -277,13 +287,29 @@
 				class="pr-1 text-[color-mix(in_srgb,var(--theme-fg)_35%,transparent)] transition duration-200 group-hover/card:opacity-0"
 				aria-hidden="true"
 			>
-				↗
+				{bookmark.pinnedAt ? '📌' : '↗'}
 			</span>
 		</div>
 
 		<div
 			class="absolute inset-y-0 right-2.5 z-10 flex items-center gap-1.5 opacity-0 transition duration-150 focus-within:opacity-100 group-hover/card:opacity-100"
 		>
+			<form method="POST" action="?/pin" use:enhance>
+				<input type="hidden" name="id" value={bookmark.id} />
+				<button
+					type="submit"
+					title={bookmark.pinnedAt ? 'Unpin' : `Pin to top (max ${MAX_PINNED})`}
+					aria-label={bookmark.pinnedAt ? 'Unpin bookmark' : 'Pin bookmark'}
+					class={`border px-2 py-1 text-xs backdrop-blur transition ${
+						bookmark.pinnedAt
+							? 'border-[color-mix(in_srgb,var(--cat)_60%,transparent)] bg-[color-mix(in_srgb,var(--cat)_20%,transparent)] text-[var(--theme-fg)]'
+							: 'border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] text-[color-mix(in_srgb,var(--theme-fg)_80%,transparent)] hover:border-[var(--cat)] hover:text-[var(--theme-fg)]'
+					}`}
+				>
+					{bookmark.pinnedAt ? 'Unpin' : 'Pin'}
+				</button>
+			</form>
+
 			<button
 				type="button"
 				onclick={() => openEdit(bookmark)}
@@ -406,6 +432,26 @@
 				</button>
 			{/each}
 		</nav>
+	{/if}
+
+	{#if pinnedBookmarks.length > 0}
+		<section class="mt-7" aria-label="Pinned bookmarks">
+			<div class="flex items-center gap-3">
+				<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
+					Pinned
+				</h2>
+				<span class="text-xs text-[color-mix(in_srgb,var(--theme-fg)_42%,transparent)]">
+					{pinnedBookmarks.length}/{MAX_PINNED}
+				</span>
+				<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] to-transparent"></div>
+			</div>
+
+			<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+				{#each pinnedBookmarks as bookmark (bookmark.id)}
+					{@render bookmarkCard(bookmark, categoryColor(bookmark.category))}
+				{/each}
+			</div>
+		</section>
 	{/if}
 
 	{#if recentBookmarks.length > 0}

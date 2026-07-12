@@ -5,6 +5,7 @@ import {
 	deleteBookmark,
 	listBookmarks,
 	recordBookmarkVisit,
+	toggleBookmarkPin,
 	updateBookmark
 } from '$lib/server/bookmarks';
 import { listGroups } from '$lib/server/groups';
@@ -53,6 +54,23 @@ export const actions = {
 		}
 
 		return { ok: true, intent: 'delete', id };
+	},
+
+	pin: async ({ request }) => {
+		const formData = await request.formData();
+		const id = String(formData.get('id') ?? '');
+
+		try {
+			const bookmark = await toggleBookmarkPin(id);
+
+			if (!bookmark) {
+				return fail(404, { ok: false, intent: 'pin', message: 'Bookmark was not found.' });
+			}
+
+			return { ok: true, intent: 'pin', bookmark };
+		} catch (error) {
+			return fail(400, { ok: false, intent: 'pin', message: getMessage(error) });
+		}
 	},
 
 	visit: async ({ request }) => {
