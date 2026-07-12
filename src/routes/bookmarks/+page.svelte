@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { hostOf, iconCandidatesForBookmark } from '$lib/dashboard-icons.js';
 	import { cssColorForKey } from '$lib/group-color';
-	import { fade, fly } from 'svelte/transition';
+	import { fade, fly, scale } from 'svelte/transition';
 
 	type Bookmark = {
 		id: string;
@@ -23,6 +23,7 @@
 	let search = $state('');
 	let activeCategory = $state('');
 	let confirmingDelete = $state<string | null>(null);
+	let openMenu = $state<string | null>(null);
 	let searchInput = $state<HTMLInputElement>();
 	let loadedFavicons = $state<Record<string, boolean>>({});
 	let failedIconAttempts = $state<Record<string, number>>({});
@@ -188,7 +189,9 @@
 
 	function onKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
-			if (editorOpen) {
+			if (openMenu) {
+				openMenu = null;
+			} else if (editorOpen) {
 				closeEditor();
 			} else if (search) {
 				search = '';
@@ -234,11 +237,15 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-{#snippet bookmarkCard(bookmark: Bookmark, accent: string)}
+{#snippet bookmarkCard(bookmark: Bookmark, accent: string, section: string)}
+	{@const atPinLimit = !bookmark.pinnedAt && pinnedBookmarks.length >= MAX_PINNED}
+	{@const cardKey = `${section}:${bookmark.id}`}
 	<article
 		style={`--cat: ${accent}`}
 		in:fade={{ duration: 150 }}
-		class="group/card relative overflow-hidden border border-[color:var(--cat)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-2.5 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color-mix(in_srgb,var(--theme-panel)_80%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--cat)_65%,transparent)]"
+		class={`group/card relative border border-[color:var(--cat)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-2.5 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color-mix(in_srgb,var(--theme-panel)_80%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--cat)_65%,transparent)] ${
+			openMenu === cardKey ? 'z-30' : 'z-0'
+		}`}
 	>
 		<div
 			class="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[color-mix(in_srgb,var(--cat)_70%,transparent)] to-transparent opacity-0 transition duration-200 group-hover/card:opacity-100"
@@ -289,48 +296,87 @@
 			</span>
 		</div>
 
-		<div
-			class="absolute inset-y-0 right-2.5 z-10 flex items-center gap-1.5 opacity-0 transition duration-150 focus-within:opacity-100 group-hover/card:opacity-100"
+		<button
+			type="button"
+			onclick={() => (openMenu = openMenu === cardKey ? null : cardKey)}
+			aria-haspopup="menu"
+			aria-expanded={openMenu === cardKey}
+			aria-label={`Actions for ${bookmark.title}`}
+			class={`absolute right-2 top-2 z-10 grid h-6 w-6 place-items-center border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] text-xs leading-none text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)] backdrop-blur transition hover:border-[var(--cat)] hover:text-[var(--theme-fg)] focus-visible:opacity-100 max-sm:opacity-100 ${
+				openMenu === cardKey
+					? 'border-[var(--cat)] text-[var(--theme-fg)] opacity-100'
+					: 'opacity-0 group-hover/card:opacity-100'
+			}`}
 		>
-			<form method="POST" action="?/pin" use:enhance>
-				<input type="hidden" name="id" value={bookmark.id} />
-				<button
-					type="submit"
-					title={bookmark.pinnedAt ? 'Unpin' : `Pin to top (max ${MAX_PINNED})`}
-					aria-label={bookmark.pinnedAt ? 'Unpin bookmark' : 'Pin bookmark'}
-					class={`border px-2 py-1 text-xs backdrop-blur transition ${
-						bookmark.pinnedAt
-							? 'border-[color-mix(in_srgb,var(--cat)_60%,transparent)] bg-[color-mix(in_srgb,var(--cat)_20%,transparent)] text-[var(--theme-fg)]'
-							: 'border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] text-[color-mix(in_srgb,var(--theme-fg)_80%,transparent)] hover:border-[var(--cat)] hover:text-[var(--theme-fg)]'
-					}`}
-				>
-					{bookmark.pinnedAt ? 'Unpin' : 'Pin'}
-				</button>
-			</form>
+			⋯
+		</button>
 
-			<button
-				type="button"
-				onclick={() => openEdit(bookmark)}
-				class="border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] px-2 py-1 text-xs text-[color-mix(in_srgb,var(--theme-fg)_80%,transparent)] backdrop-blur transition hover:border-[var(--cat)] hover:text-[var(--theme-fg)]"
+		{#if openMenu === cardKey}
+			<div
+				class="fixed inset-0 z-10"
+				role="presentation"
+				onclick={() => {
+					openMenu = null;
+					confirmingDelete = null;
+				}}
+			></div>
+
+			<div
+				class="absolute right-2 top-9 z-20 w-36 border border-[color-mix(in_srgb,var(--cat)_40%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_40%,var(--theme-bg))] p-1 shadow-[0_20px_60px_-20px_color-mix(in_srgb,var(--theme-bg)_90%,transparent)] backdrop-blur"
+				transition:scale={{ duration: 120, start: 0.96 }}
+				role="menu"
 			>
-				Edit
-			</button>
+				<form method="POST" action="?/pin" use:enhance={() => async ({ update }) => {
+					openMenu = null;
+					await update();
+				}}>
+					<input type="hidden" name="id" value={bookmark.id} />
+					<button
+						type="submit"
+						role="menuitem"
+						disabled={atPinLimit}
+						title={atPinLimit ? `${MAX_PINNED}/${MAX_PINNED} pinned — unpin one first` : undefined}
+						class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition hover:bg-[color-mix(in_srgb,var(--theme-fg)_8%,transparent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+					>
+						<span aria-hidden="true">📌</span>
+						{bookmark.pinnedAt ? 'Unpin' : 'Pin'}
+					</button>
+				</form>
 
-			<form method="POST" action="?/delete" use:enhance>
-				<input type="hidden" name="id" value={bookmark.id} />
 				<button
-					type="submit"
-					onclick={(event) => requestDelete(event, bookmark.id)}
-					class={`border px-2 py-1 text-xs backdrop-blur transition ${
-						confirmingDelete === bookmark.id
-							? 'border-[var(--theme-danger)] bg-[color-mix(in_srgb,var(--theme-danger)_22%,transparent)] text-[var(--theme-fg)]'
-							: 'border-[color-mix(in_srgb,var(--theme-danger)_40%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] text-[var(--theme-danger)] hover:bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)]'
-					}`}
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						openMenu = null;
+						openEdit(bookmark);
+					}}
+					class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition hover:bg-[color-mix(in_srgb,var(--theme-fg)_8%,transparent)]"
 				>
-					{confirmingDelete === bookmark.id ? 'Sure?' : 'Delete'}
+					<span aria-hidden="true">✎</span>
+					Edit
 				</button>
-			</form>
-		</div>
+
+				<form method="POST" action="?/delete" use:enhance={() => async ({ update }) => {
+					openMenu = null;
+					await update();
+				}}>
+					<input type="hidden" name="id" value={bookmark.id} />
+					<button
+						type="submit"
+						role="menuitem"
+						onclick={(event) => requestDelete(event, bookmark.id)}
+						class={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition ${
+							confirmingDelete === bookmark.id
+								? 'bg-[color-mix(in_srgb,var(--theme-danger)_22%,transparent)] text-[var(--theme-fg)]'
+								: 'text-[var(--theme-danger)] hover:bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)]'
+						}`}
+					>
+						<span aria-hidden="true">✕</span>
+						{confirmingDelete === bookmark.id ? 'Sure?' : 'Delete'}
+					</button>
+				</form>
+			</div>
+		{/if}
 	</article>
 {/snippet}
 
@@ -446,7 +492,7 @@
 
 			<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
 				{#each pinnedBookmarks as bookmark (bookmark.id)}
-					{@render bookmarkCard(bookmark, categoryColor(bookmark.category))}
+					{@render bookmarkCard(bookmark, categoryColor(bookmark.category), 'pinned')}
 				{/each}
 			</div>
 		</section>
@@ -466,7 +512,7 @@
 
 			<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
 				{#each recentBookmarks as bookmark (bookmark.id)}
-					{@render bookmarkCard(bookmark, categoryColor(bookmark.category))}
+					{@render bookmarkCard(bookmark, categoryColor(bookmark.category), 'recent')}
 				{/each}
 			</div>
 		</section>
@@ -517,7 +563,7 @@
 
 				<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 					{#each group.bookmarks as bookmark (bookmark.id)}
-						{@render bookmarkCard(bookmark, categoryColor(group.category))}
+						{@render bookmarkCard(bookmark, categoryColor(group.category), `group-${group.category}`)}
 					{/each}
 				</div>
 			</section>
