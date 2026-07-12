@@ -30,6 +30,9 @@
 	let draftUrl = $state('');
 	let draftCategory = $state('General');
 	let draftIcon = $state('↗');
+	let newCategory = $state(false);
+
+	const NEW_CATEGORY = '__new__';
 
 	const editorOpen = $derived(creating || editing !== null);
 
@@ -134,8 +137,9 @@
 		editing = null;
 		draftTitle = '';
 		draftUrl = '';
-		draftCategory = activeCategory || 'General';
+		draftCategory = activeCategory || categories[0] || 'General';
 		draftIcon = '↗';
+		newCategory = false;
 	}
 
 	function openEdit(bookmark: Bookmark) {
@@ -145,6 +149,22 @@
 		draftUrl = bookmark.url;
 		draftCategory = bookmark.category;
 		draftIcon = bookmark.icon;
+		newCategory = false;
+	}
+
+	function selectCategory(value: string) {
+		if (value === NEW_CATEGORY) {
+			newCategory = true;
+			draftCategory = '';
+			return;
+		}
+
+		draftCategory = value;
+	}
+
+	function cancelNewCategory() {
+		newCategory = false;
+		draftCategory = categories[0] ?? 'General';
 	}
 
 	function closeEditor() {
@@ -198,6 +218,12 @@
 	function autofocus(node: HTMLElement) {
 		node.focus();
 	}
+
+	function autofocusIf(node: HTMLElement, enabled: boolean) {
+		if (enabled) {
+			node.focus();
+		}
+	}
 </script>
 
 <svelte:head>
@@ -210,7 +236,7 @@
 	<article
 		style={`--cat: ${accent}`}
 		in:fade={{ duration: 150 }}
-		class="group/card relative overflow-hidden border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-2.5 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--cat)_55%,transparent)] hover:bg-[color-mix(in_srgb,var(--theme-panel)_80%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--cat)_65%,transparent)]"
+		class="group/card relative overflow-hidden border border-[color:var(--cat)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-2.5 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-[color-mix(in_srgb,var(--theme-panel)_80%,transparent)] hover:shadow-[0_12px_36px_-14px_color-mix(in_srgb,var(--cat)_65%,transparent)]"
 	>
 		<div
 			class="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[color-mix(in_srgb,var(--cat)_70%,transparent)] to-transparent opacity-0 transition duration-200 group-hover/card:opacity-100"
@@ -565,17 +591,39 @@
 				<div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,14rem)]">
 					<label class="grid gap-2 text-sm">
 						<span class="text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]">Category</span>
-						<input
-							name="category"
-							bind:value={draftCategory}
-							list="bookmark-categories"
-							class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-2.5 outline-none transition focus:border-[var(--theme-accent)] focus:shadow-[0_0_16px_-6px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]"
-						/>
-						<datalist id="bookmark-categories">
-							{#each categories as category (category)}
-								<option value={category}></option>
-							{/each}
-						</datalist>
+						<input type="hidden" name="category" value={draftCategory} />
+
+						{#if categories.length > 0 && !newCategory}
+							<select
+								value={draftCategory}
+								onchange={(event) => selectCategory(event.currentTarget.value)}
+								class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-2.5 outline-none transition focus:border-[var(--theme-accent)] focus:shadow-[0_0_16px_-6px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]"
+							>
+								{#each categories as category (category)}
+									<option value={category}>{category}</option>
+								{/each}
+								<option value={NEW_CATEGORY}>＋ New category…</option>
+							</select>
+						{:else}
+							<div class="flex items-center gap-2">
+								<input
+									use:autofocusIf={newCategory}
+									bind:value={draftCategory}
+									placeholder="Media"
+									class="min-w-0 flex-1 border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-2.5 outline-none transition placeholder:text-[color-mix(in_srgb,var(--theme-fg)_32%,transparent)] focus:border-[var(--theme-accent)] focus:shadow-[0_0_16px_-6px_color-mix(in_srgb,var(--theme-accent)_60%,transparent)]"
+								/>
+								{#if categories.length > 0}
+									<button
+										type="button"
+										onclick={cancelNewCategory}
+										aria-label="Pick an existing category"
+										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-2.5 py-2.5 text-xs transition hover:border-[var(--theme-accent)]"
+									>
+										×
+									</button>
+								{/if}
+							</div>
+						{/if}
 					</label>
 
 					<label class="grid gap-2 text-sm">
