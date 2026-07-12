@@ -17,14 +17,13 @@
 	const LOCAL_THEME_KEY = 'dash:local-omarchy-theme';
 
 	const links = [
-		{ href: '/', label: 'Overview' },
 		{ href: '/bookmarks', label: 'Bookmarks' },
 		{ href: '/news', label: 'News' },
-		{ href: '/homelab', label: 'Homelab' }
+		{ href: '/homelab', label: 'Homelab' },
+		{ href: '/settings', label: 'Settings' }
 	];
 
-	const isActive = (href: string) =>
-		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+	const isActive = (href: string) => page.url.pathname.startsWith(href);
 
 	let pickerOpen = $state(false);
 	let switching = $state(false);

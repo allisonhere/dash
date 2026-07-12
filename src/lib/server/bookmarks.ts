@@ -72,6 +72,28 @@ export function listRecentBookmarks(bookmarks: Bookmark[], limit = 8): Bookmark[
 	return listRecent(bookmarks, limit);
 }
 
+// Bookmarks reference their group by name, so renaming or deleting a group has
+// to rewrite every bookmark pointing at the old name.
+export async function reassignCategory(from: string, to: string) {
+	const bookmarks = await listBookmarks();
+	let changed = 0;
+
+	const next = bookmarks.map((bookmark) => {
+		if (bookmark.category !== from) {
+			return bookmark;
+		}
+
+		changed += 1;
+		return { ...bookmark, category: to };
+	});
+
+	if (changed > 0) {
+		await writeBookmarks(next);
+	}
+
+	return changed;
+}
+
 export async function deleteBookmark(id: string) {
 	const bookmarks = await listBookmarks();
 	const nextBookmarks = bookmarks.filter((bookmark) => bookmark.id !== id);

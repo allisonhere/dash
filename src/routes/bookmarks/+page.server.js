@@ -7,11 +7,12 @@ import {
 	recordBookmarkVisit,
 	updateBookmark
 } from '$lib/server/bookmarks';
+import { listGroups } from '$lib/server/groups';
 
 export const load = async () => {
-	return {
-		bookmarks: await listBookmarks()
-	};
+	const [bookmarks, groups] = await Promise.all([listBookmarks(), listGroups()]);
+
+	return { bookmarks, groups };
 };
 
 export const actions = {

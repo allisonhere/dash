@@ -9,7 +9,7 @@ import { dashboardConfigPath } from './dashboard-config';
 // while each still reads its omarchy theme and homelab config locally.
 
 const STORE_TIMEOUT_MS = 8_000;
-const ALLOWED = new Set(['bookmarks', 'feeds']);
+const ALLOWED = new Set(['bookmarks', 'feeds', 'groups']);
 
 function remoteConfig(): { url: string; token: string } | null {
 	const url = env.DASH_STORE_URL?.trim();

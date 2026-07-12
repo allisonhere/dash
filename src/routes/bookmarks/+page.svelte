@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { hostOf, iconCandidatesForBookmark } from '$lib/dashboard-icons.js';
+	import { cssColor } from '$lib/group-color';
 	import { fade, fly } from 'svelte/transition';
 
 	type Bookmark = {
@@ -36,9 +37,9 @@
 
 	const editorOpen = $derived(creating || editing !== null);
 
-	const categories = $derived(
-		Array.from(new Set(data.bookmarks.map((bookmark) => bookmark.category))).sort()
-	);
+	// Groups come from settings now, so an empty group still offers itself in the
+	// category dropdown even though it renders no section below.
+	const categories = $derived(data.groups.map((group) => group.name));
 
 	const filtered = $derived(
 		data.bookmarks.filter((bookmark) => {
@@ -74,19 +75,12 @@
 			.slice(0, 8)
 	);
 
-	const PALETTE = [
-		'--theme-accent',
-		'--theme-color12',
-		'--theme-color3',
-		'--theme-color6',
-		'--theme-color5',
-		'--theme-color11',
-		'--theme-color14'
-	];
-
 	function categoryColor(category: string) {
-		const index = Math.max(0, categories.indexOf(category));
-		return `var(${PALETTE[index % PALETTE.length]}, var(--theme-accent))`;
+		const index = Math.max(
+			0,
+			data.groups.findIndex((group) => group.name === category)
+		);
+		return cssColor(data.groups[index]?.color ?? '', index);
 	}
 
 	function iconCandidates(bookmark: Pick<Bookmark, 'title' | 'url' | 'icon'>) {
@@ -428,7 +422,7 @@
 
 			<div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
 				{#each recentBookmarks as bookmark (bookmark.id)}
-					{@render bookmarkCard(bookmark, 'var(--theme-accent)')}
+					{@render bookmarkCard(bookmark, categoryColor(bookmark.category))}
 				{/each}
 			</div>
 		</section>
