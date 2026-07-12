@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { hostOf, iconCandidatesForBookmark } from '$lib/dashboard-icons.js';
-	import { cssColor } from '$lib/group-color';
+	import { cssColorForKey } from '$lib/group-color';
 	import { fade, fly } from 'svelte/transition';
 
 	type Bookmark = {
@@ -86,11 +86,9 @@
 	);
 
 	function categoryColor(category: string) {
-		const index = Math.max(
-			0,
-			data.groups.findIndex((group) => group.name === category)
-		);
-		return cssColor(data.groups[index]?.color ?? '', index);
+		const index = data.groups.findIndex((group) => group.name === category);
+		const group = index >= 0 ? data.groups[index] : null;
+		return cssColorForKey(group?.color ?? '', category, Math.max(0, index));
 	}
 
 	function iconCandidates(bookmark: Pick<Bookmark, 'title' | 'url' | 'icon'>) {

@@ -57,3 +57,28 @@ export function cssColor(color: string, index = 0): string {
 
 	return `var(${PALETTE[index % PALETTE.length]}, var(--theme-accent))`;
 }
+
+export function cssColorForKey(color: string, key: string, fallbackIndex = 0): string {
+	const value = color.trim();
+
+	if (value) {
+		return cssColor(value, fallbackIndex);
+	}
+
+	return cssColor('', stablePaletteIndex(key, fallbackIndex));
+}
+
+function stablePaletteIndex(key: string, fallbackIndex: number): number {
+	const value = key.trim().toLowerCase();
+
+	if (!value) {
+		return fallbackIndex;
+	}
+
+	let hash = 0;
+	for (let index = 0; index < value.length; index += 1) {
+		hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+	}
+
+	return hash % PALETTE.length;
+}
