@@ -72,15 +72,21 @@
 
 	const MAX_PINNED = 4;
 
+	// Tracked against the full unfiltered set so the pin cap and "x/4" badge stay
+	// accurate even while a search or category filter hides some pinned cards.
+	const totalPinnedCount = $derived(
+		data.bookmarks.filter((bookmark) => Boolean(bookmark.pinnedAt)).length
+	);
+
 	const pinnedBookmarks = $derived(
-		data.bookmarks
+		filtered
 			.filter((bookmark) => Boolean(bookmark.pinnedAt))
 			.toSorted((left, right) => Date.parse(left.pinnedAt ?? '') - Date.parse(right.pinnedAt ?? ''))
 			.slice(0, MAX_PINNED)
 	);
 
 	const recentBookmarks = $derived(
-		data.bookmarks
+		filtered
 			.filter((bookmark) => !bookmark.pinnedAt && effectiveLastUsedAt(bookmark) !== '')
 			.toSorted((left, right) => Date.parse(effectiveLastUsedAt(right)) - Date.parse(effectiveLastUsedAt(left)))
 			.slice(0, 8)
@@ -238,7 +244,7 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#snippet bookmarkCard(bookmark: Bookmark, accent: string, section: string)}
-	{@const atPinLimit = !bookmark.pinnedAt && pinnedBookmarks.length >= MAX_PINNED}
+	{@const atPinLimit = !bookmark.pinnedAt && totalPinnedCount >= MAX_PINNED}
 	{@const cardKey = `${section}:${bookmark.id}`}
 	<article
 		style={`--cat: ${accent}`}
@@ -485,7 +491,7 @@
 					Pinned
 				</h2>
 				<span class="text-xs text-[color-mix(in_srgb,var(--theme-fg)_42%,transparent)]">
-					{pinnedBookmarks.length}/{MAX_PINNED}
+					{totalPinnedCount}/{MAX_PINNED}
 				</span>
 				<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] to-transparent"></div>
 			</div>
@@ -544,9 +550,15 @@
 		</section>
 	{:else if groups.length === 0}
 		<p class="mt-10 text-center text-sm text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)]" in:fade>
-			Nothing matches “{search}”. Press
-			<kbd class="border border-[color-mix(in_srgb,var(--theme-fg)_20%,transparent)] px-1.5 py-0.5 text-xs">Esc</kbd>
-			to clear the search.
+			{#if search}
+				Nothing matches “{search}”. Press
+				<kbd class="border border-[color-mix(in_srgb,var(--theme-fg)_20%,transparent)] px-1.5 py-0.5 text-xs">Esc</kbd>
+				to clear the search.
+			{:else if activeCategory}
+				No bookmarks in “{activeCategory}” yet.
+			{:else}
+				No bookmarks match the current filters.
+			{/if}
 		</p>
 	{:else}
 		{#each groups as group (group.category)}

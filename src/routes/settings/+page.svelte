@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { cssColor, SWATCHES } from '$lib/group-color';
 	import { fade } from 'svelte/transition';
+	import { untrack } from 'svelte';
 
 	let { data, form }: { data: import('./$types').PageData; form: import('./$types').ActionData } =
 		$props();
@@ -17,11 +18,24 @@
 	let newColor = $state('');
 
 	// Re-seed the row drafts whenever the server data changes, so a saved row
-	// snaps back to the persisted values instead of holding a stale edit.
+	// snaps back to the persisted values instead of holding a stale edit. Rows
+	// with an unsaved edit of their own are left alone rather than being wiped
+	// out by a save elsewhere on the page (untrack keeps this from depending on
+	// `drafts` itself, which it also writes to).
 	$effect(() => {
-		drafts = Object.fromEntries(
-			data.groups.map((group) => [group.id, { name: group.name, color: group.color }])
-		);
+		const groups = data.groups;
+
+		untrack(() => {
+			drafts = Object.fromEntries(
+				groups.map((group) => {
+					const existing = drafts[group.id];
+					const isDirty =
+						existing && (existing.name !== group.name || existing.color !== group.color);
+
+					return [group.id, isDirty ? existing : { name: group.name, color: group.color }];
+				})
+			);
+		});
 	});
 
 	const otherGroups = (id: string) => data.groups.filter((group) => group.id !== id);
