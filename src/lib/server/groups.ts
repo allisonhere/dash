@@ -13,6 +13,11 @@ export type Group = {
 // position. They are a real collection now, but bookmarks still reference a
 // group by name, so any category without a group record is adopted on read.
 // That keeps pre-existing bookmarks.json files working with no migration.
+//
+// Adopted ids must be stable across reads: the settings page round-trips them
+// through forms, so a random id here would never match on the next request
+// ("Group was not found"). An update/delete on an adopted group persists it —
+// see the writes in updateGroup/deleteGroup, which store the full list.
 export async function listGroups(): Promise<Group[]> {
 	const [stored, bookmarks] = await Promise.all([
 		readCollection<unknown>('groups'),
@@ -22,10 +27,15 @@ export async function listGroups(): Promise<Group[]> {
 	const groups = stored.filter(isGroup);
 	const known = new Set(groups.map((group) => group.name.toLowerCase()));
 
-	const orphans = Array.from(new Set(bookmarks.map((bookmark) => bookmark.category)))
-		.filter((category) => !known.has(category.toLowerCase()))
+	const orphans = Array.from(
+		new Map(
+			bookmarks
+				.filter((bookmark) => !known.has(bookmark.category.toLowerCase()))
+				.map((bookmark) => [bookmark.category.toLowerCase(), bookmark.category])
+		).values()
+	)
 		.sort()
-		.map((category) => ({ id: randomUUID(), name: category, color: '' }));
+		.map((category) => ({ id: `adopted:${category.toLowerCase()}`, name: category, color: '' }));
 
 	return [...groups, ...orphans];
 }
