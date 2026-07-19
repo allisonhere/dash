@@ -36,6 +36,10 @@ export type ProxmoxStatus = {
 	guests: ProxmoxGuest[];
 };
 
+export type ProxmoxAction = 'start' | 'shutdown' | 'stop' | 'reboot';
+
+export const PROXMOX_ACTIONS: readonly ProxmoxAction[] = ['start', 'shutdown', 'stop', 'reboot'];
+
 const TIMEOUT_MS = 10_000;
 
 // Proxmox ships a self-signed cert by default; this dispatcher opts out of TLS
@@ -81,6 +85,49 @@ export async function loadProxmox(config: ProxmoxConfig): Promise<ProxmoxStatus>
 	} catch (error) {
 		return { ...base, error: toMessage(error) };
 	}
+}
+
+// Fires a power action against a guest. The endpoint queues a Proxmox task and
+// returns immediately, so success here means "accepted", not "finished".
+export async function controlProxmoxGuest(
+	config: ProxmoxConfig,
+	guest: { node: string; type: 'qemu' | 'lxc'; vmid: number },
+	action: ProxmoxAction
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	try {
+		const { statusCode, body } = await request(
+			`${config.url}/api2/json/nodes/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}/status/${action}`,
+			{
+				method: 'POST',
+				headers: { Authorization: `PVEAPIToken=${config.tokenId}=${config.secret}` },
+				dispatcher: config.allowSelfSigned ? insecureAgent : undefined,
+				headersTimeout: TIMEOUT_MS,
+				bodyTimeout: TIMEOUT_MS
+			}
+		);
+
+		if (statusCode >= 200 && statusCode < 300) {
+			body.dump();
+			return { ok: true };
+		}
+
+		const reason = ((await body.text().catch(() => '')) || '').split('\n')[0].trim();
+		return { ok: false, error: actionHttpError(statusCode, reason) };
+	} catch (error) {
+		return { ok: false, error: toMessage(error) };
+	}
+}
+
+function actionHttpError(status: number, reason: string): string {
+	if (status === 401) {
+		return 'Authentication failed — check the token ID and secret.';
+	}
+
+	if (status === 403) {
+		return 'Token lacks permission — power actions need the VM.PowerMgmt privilege (e.g. grant PVEVMAdmin alongside PVEAuditor).';
+	}
+
+	return reason || `HTTP ${status}`;
 }
 
 function toNode(item: Resource): ProxmoxNode {

@@ -12,7 +12,18 @@ export type DockerContainer = {
 	cpu: number;
 	memUsed: number;
 	memLimit: number;
+	// True for the container this dashboard itself runs in — stopping it kills
+	// the dash, so the UI warns before allowing it.
+	isSelf: boolean;
 };
+
+export type DockerAction = 'start' | 'stop' | 'restart';
+
+export const DOCKER_ACTIONS: readonly DockerAction[] = ['start', 'stop', 'restart'];
+
+// Docker's own container-naming rule. Anything failing this is rejected before
+// it can reach a shell.
+export const CONTAINER_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 export type DockerHostStatus = {
 	name: string;
@@ -24,6 +35,21 @@ export type DockerHostStatus = {
 };
 
 const SSH_TIMEOUT_MS = 15_000;
+
+// `docker stop` waits out the container's grace period (10s default, compose
+// services can raise it) and restart is a stop plus a start, so control calls
+// get far longer than status reads.
+const CONTROL_TIMEOUT_MS = 45_000;
+
+const SSH_OPTIONS = [
+	'-o', 'BatchMode=yes',
+	'-o', 'ConnectTimeout=5',
+	'-o', 'StrictHostKeyChecking=accept-new'
+];
+
+function isLocalTarget(config: DockerHostConfig): boolean {
+	return config.ssh === 'local' || config.ssh === '';
+}
 
 // One round-trip: container list + live stats + host vitals, split by markers.
 // Avoids `{{json .}}` for `docker ps` because its Labels field is megabytes.
@@ -52,34 +78,63 @@ export async function loadDockerHost(config: DockerHostConfig): Promise<DockerHo
 		// A "local" target runs the docker script in this process's own
 		// environment — used by the container, which talks to the host's Docker
 		// via a mounted socket instead of SSH. Otherwise SSH to the named host.
-		const isLocal = config.ssh === 'local' || config.ssh === '';
-
-		const { stdout } = isLocal
+		const { stdout } = isLocalTarget(config)
 			? await run('sh', ['-c', REMOTE_SCRIPT], {
 					timeout: SSH_TIMEOUT_MS,
 					maxBuffer: 4 * 1024 * 1024
 				})
-			: await run(
-					'ssh',
-					[
-						'-o', 'BatchMode=yes',
-						'-o', 'ConnectTimeout=5',
-						'-o', 'StrictHostKeyChecking=accept-new',
-						config.ssh,
-						REMOTE_SCRIPT
-					],
-					{ timeout: SSH_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 }
-				);
+			: await run('ssh', [...SSH_OPTIONS, config.ssh, REMOTE_SCRIPT], {
+					timeout: SSH_TIMEOUT_MS,
+					maxBuffer: 4 * 1024 * 1024
+				});
 
-		return parseOutput(stdout, base);
+		return parseOutput(stdout, base, isLocalTarget(config));
 	} catch (error) {
 		return { ...base, error: sshError(error) };
 	}
 }
 
-function parseOutput(stdout: string, base: DockerHostStatus): DockerHostStatus {
+export async function controlDockerContainer(
+	config: DockerHostConfig,
+	containerName: string,
+	action: DockerAction
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	// Callers validate too, but re-check here so this function is safe on its
+	// own: the SSH branch interpolates the name into a remote shell command,
+	// which is only acceptable with the allowlist + name regex holding.
+	if (!DOCKER_ACTIONS.includes(action)) {
+		return { ok: false, error: 'Unsupported action.' };
+	}
+
+	if (!CONTAINER_NAME_RE.test(containerName)) {
+		return { ok: false, error: 'Invalid container name.' };
+	}
+
+	try {
+		if (isLocalTarget(config)) {
+			await run('docker', [action, containerName], { timeout: CONTROL_TIMEOUT_MS });
+		} else {
+			await run('ssh', [...SSH_OPTIONS, config.ssh, `docker ${action} ${containerName}`], {
+				timeout: CONTROL_TIMEOUT_MS
+			});
+		}
+
+		return { ok: true };
+	} catch (error) {
+		const stderr = ((error as { stderr?: string })?.stderr ?? '').trim();
+
+		if (/no such container/i.test(stderr)) {
+			return { ok: false, error: 'Container not found — it may have been removed.' };
+		}
+
+		return { ok: false, error: sshError(error) };
+	}
+}
+
+function parseOutput(stdout: string, base: DockerHostStatus, isLocal: boolean): DockerHostStatus {
 	const sections = splitSections(stdout);
 	const stats = parseStats(sections.stats);
+	const selfName = process.env.DASH_SELF_CONTAINER ?? 'dash';
 
 	const containers = sections.ps
 		.map((line) => {
@@ -98,7 +153,8 @@ function parseOutput(stdout: string, base: DockerHostStatus): DockerHostStatus {
 				status: status ?? '',
 				cpu: stat?.cpu ?? 0,
 				memUsed: stat?.memUsed ?? 0,
-				memLimit: stat?.memLimit ?? 0
+				memLimit: stat?.memLimit ?? 0,
+				isSelf: isLocal && name === selfName
 			};
 		})
 		.filter((container): container is DockerContainer => container !== null)

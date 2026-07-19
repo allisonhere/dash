@@ -1,23 +1,168 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
-	import { fade } from 'svelte/transition';
+	import { fade, scale } from 'svelte/transition';
+	import type { SubmitFunction } from '@sveltejs/kit';
 
 	let { data }: { data: import('./$types').PageData } = $props();
 
 	let refreshing = $state(false);
+	let openMenu = $state<string | null>(null);
+	let confirming = $state<string | null>(null);
+	let pending = $state<Record<string, { action: UiAction; at: number }>>({});
+	let actionError = $state<Record<string, string>>({});
 
-	// Auto-refresh the status every 10s while the tab is visible.
+	type UiAction = 'start' | 'stop' | 'restart';
+
+	// Live updates: the server pushes a message whenever container/VM status
+	// changes (see /homelab/events). Closed while the tab is hidden so an idle
+	// background tab doesn't keep the server polling.
 	$effect(() => {
-		const tick = () => {
-			if (!document.hidden) {
+		let source: EventSource | null = null;
+
+		const connect = () => {
+			if (source) {
+				return;
+			}
+
+			source = new EventSource('/homelab/events');
+			source.onmessage = () => invalidate('homelab:status');
+		};
+
+		const disconnect = () => {
+			source?.close();
+			source = null;
+		};
+
+		const onVisibility = () => {
+			if (document.hidden) {
+				disconnect();
+			} else {
+				connect();
 				invalidate('homelab:status');
 			}
 		};
 
-		const timer = setInterval(tick, 10_000);
+		connect();
+		document.addEventListener('visibilitychange', onVisibility);
+
+		return () => {
+			disconnect();
+			document.removeEventListener('visibilitychange', onVisibility);
+		};
+	});
+
+	// Re-evaluate pending entries on a slow tick even when no fresh data
+	// arrives, so time-based clears (restart, expiry) still fire.
+	let pruneTick = $state(0);
+
+	$effect(() => {
+		const timer = setInterval(() => (pruneTick += 1), 3_000);
 		return () => clearInterval(timer);
 	});
+
+	// Clear pending markers once the observed state catches up: a start settles
+	// on `running`, a stop on anything else. Proxmox reports `running` all the
+	// way through a reboot, so restarts clear on a fixed delay instead. The 90s
+	// cap covers actions that were accepted upstream but never took effect.
+	$effect(() => {
+		void pruneTick;
+
+		const states = new Map<string, string>();
+
+		for (const guest of proxmox?.guests ?? []) {
+			states.set(`pve:${guest.vmid}`, guest.status);
+		}
+
+		for (const host of dockerHosts) {
+			for (const container of host.containers) {
+				states.set(`docker:${host.name}/${container.name}`, container.state);
+			}
+		}
+
+		const now = Date.now();
+
+		for (const [key, entry] of Object.entries(pending)) {
+			const observed = states.get(key);
+			const settled =
+				(entry.action === 'start' && observed === 'running') ||
+				(entry.action === 'stop' && observed !== undefined && observed !== 'running') ||
+				(entry.action === 'restart' && now - entry.at > 12_000);
+
+			if (settled || now - entry.at > 90_000) {
+				delete pending[key];
+			}
+		}
+	});
+
+	let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function arm(key: string) {
+		confirming = key;
+
+		if (confirmTimer) {
+			clearTimeout(confirmTimer);
+		}
+
+		confirmTimer = setTimeout(() => {
+			if (confirming === key) {
+				confirming = null;
+			}
+		}, 2500);
+	}
+
+	// Shared submit handler for every power-action form. Destructive actions
+	// arm on the first click ("Sure?") and only submit on the second. For the
+	// dash's own container, stop/restart kills this server mid-request, so the
+	// pending state is set up-front and a dropped response is expected.
+	function handleAction(
+		key: string,
+		uiAction: UiAction,
+		needsConfirm: boolean,
+		isSelf = false
+	): SubmitFunction {
+		return ({ cancel }) => {
+			const confirmKey = `${key}:${uiAction}`;
+
+			if (needsConfirm && confirming !== confirmKey) {
+				cancel();
+				arm(confirmKey);
+				return;
+			}
+
+			confirming = null;
+			openMenu = null;
+			delete actionError[key];
+
+			const fireAndForget = isSelf && uiAction !== 'start';
+
+			if (fireAndForget) {
+				pending[key] = { action: uiAction, at: Date.now() };
+			}
+
+			return async ({ result, update }) => {
+				if (result.type === 'failure') {
+					const message = (result.data as { message?: string } | undefined)?.message;
+					actionError[key] = message || 'Action failed.';
+					delete pending[key];
+				} else if (result.type === 'error') {
+					if (!fireAndForget) {
+						actionError[key] = 'Action failed — the server did not respond.';
+					}
+				} else {
+					pending[key] = { action: uiAction, at: Date.now() };
+				}
+
+				await update();
+			};
+		};
+	}
+
+	const PENDING_LABEL: Record<UiAction, string> = {
+		start: 'starting…',
+		stop: 'stopping…',
+		restart: 'restarting…'
+	};
 
 	const proxmox = $derived(data.proxmox);
 	const dockerHosts = $derived(data.dockerHosts);
@@ -113,6 +258,149 @@
 	<title>Homelab | Custom Dash</title>
 </svelte:head>
 
+{#snippet controlMenu(
+	key: string,
+	label: string,
+	formAction: string,
+	fields: Array<{ name: string; value: string | number }>,
+	running: boolean,
+	isProxmox: boolean,
+	isSelf: boolean
+)}
+	<button
+		type="button"
+		onclick={() => {
+			openMenu = openMenu === key ? null : key;
+			confirming = null;
+		}}
+		aria-haspopup="menu"
+		aria-expanded={openMenu === key}
+		aria-label={`Actions for ${label}`}
+		disabled={Boolean(pending[key])}
+		class={`grid h-5 w-5 shrink-0 place-items-center border text-xs leading-none backdrop-blur transition focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-30 max-sm:opacity-100 ${
+			openMenu === key
+				? 'border-[var(--theme-accent)] text-[var(--theme-fg)] opacity-100'
+				: 'border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)] opacity-0 group-hover/row:opacity-100'
+		}`}
+	>
+		⋯
+	</button>
+
+	{#if openMenu === key}
+		<div
+			class="fixed inset-0 z-10"
+			role="presentation"
+			onclick={() => {
+				openMenu = null;
+				confirming = null;
+			}}
+		></div>
+
+		<div
+			class="absolute right-1 top-8 z-20 w-44 border border-[color-mix(in_srgb,var(--theme-accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_40%,var(--theme-bg))] p-1 shadow-[0_20px_60px_-20px_color-mix(in_srgb,var(--theme-bg)_90%,transparent)] backdrop-blur"
+			transition:scale={{ duration: 120, start: 0.96 }}
+			role="menu"
+		>
+			{#if !running}
+				<form method="POST" action={formAction} use:enhance={handleAction(key, 'start', false)}>
+					{#each fields as field (field.name)}
+						<input type="hidden" name={field.name} value={field.value} />
+					{/each}
+					<input type="hidden" name="action" value="start" />
+					<button
+						type="submit"
+						role="menuitem"
+						class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition hover:bg-[color-mix(in_srgb,var(--theme-fg)_8%,transparent)]"
+					>
+						<span aria-hidden="true">▶</span>
+						Start
+					</button>
+				</form>
+			{:else}
+				<form method="POST" action={formAction} use:enhance={handleAction(key, 'stop', true, isSelf)}>
+					{#each fields as field (field.name)}
+						<input type="hidden" name={field.name} value={field.value} />
+					{/each}
+					<input type="hidden" name="action" value={isProxmox ? 'shutdown' : 'stop'} />
+					<button
+						type="submit"
+						role="menuitem"
+						class={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition ${
+							confirming === `${key}:stop`
+								? 'bg-[color-mix(in_srgb,var(--theme-danger)_22%,transparent)] text-[var(--theme-fg)]'
+								: 'text-[var(--theme-danger)] hover:bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)]'
+						}`}
+					>
+						<span aria-hidden="true">■</span>
+						{confirming === `${key}:stop`
+							? isSelf
+								? 'Stops this dashboard — sure?'
+								: 'Sure?'
+							: 'Stop'}
+					</button>
+				</form>
+
+				{#if isProxmox && confirming === `${key}:stop`}
+					<form method="POST" action={formAction} use:enhance={handleAction(key, 'stop', false)}>
+						{#each fields as field (field.name)}
+							<input type="hidden" name={field.name} value={field.value} />
+						{/each}
+						<input type="hidden" name="action" value="stop" />
+						<button
+							type="submit"
+							role="menuitem"
+							title="Hard stop — like pulling the power"
+							class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs text-[var(--theme-danger)] transition hover:bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)]"
+						>
+							<span aria-hidden="true">⚡</span>
+							Force stop
+						</button>
+					</form>
+				{/if}
+
+				<form method="POST" action={formAction} use:enhance={handleAction(key, 'restart', true, isSelf)}>
+					{#each fields as field (field.name)}
+						<input type="hidden" name={field.name} value={field.value} />
+					{/each}
+					<input type="hidden" name="action" value={isProxmox ? 'reboot' : 'restart'} />
+					<button
+						type="submit"
+						role="menuitem"
+						class={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition ${
+							confirming === `${key}:restart`
+								? 'bg-[color-mix(in_srgb,var(--theme-warning)_22%,transparent)] text-[var(--theme-fg)]'
+								: 'hover:bg-[color-mix(in_srgb,var(--theme-fg)_8%,transparent)]'
+						}`}
+					>
+						<span aria-hidden="true">⟳</span>
+						{confirming === `${key}:restart`
+							? isSelf
+								? 'Restarts this dashboard — sure?'
+								: 'Sure?'
+							: 'Restart'}
+					</button>
+				</form>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet cardError(key: string)}
+	{#if actionError[key]}
+		<p class="mt-1 flex items-start gap-1.5 text-[11px] leading-4 text-[var(--theme-danger)]" transition:fade={{ duration: 120 }}>
+			<span class="min-w-0 flex-1">{actionError[key]}</span>
+			<button
+				type="button"
+				aria-label="Dismiss error"
+				onclick={() => delete actionError[key]}
+				class="shrink-0 leading-4 opacity-70 transition hover:opacity-100"
+			>
+				×
+			</button>
+		</p>
+	{/if}
+{/snippet}
+
 <main class="mx-auto min-h-dvh w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 	<header class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
 		<div>
@@ -151,7 +439,7 @@
 						></span>
 						<span class="relative inline-flex h-2 w-2 bg-[var(--theme-success)]"></span>
 					</span>
-					Live · 10s
+					Live
 				</span>
 				<form
 					method="POST"
@@ -200,11 +488,17 @@
   ]
 }`}</code></pre>
 				<p class="mt-4 text-sm text-[color-mix(in_srgb,var(--theme-fg)_65%,transparent)]">
-					Create a read-only Proxmox token (run in the node shell):
+					Create a Proxmox token (run in the node shell):
 				</p>
 				<pre class="mt-2 overflow-x-auto border border-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_70%,transparent)] p-4 text-xs leading-5 text-[color-mix(in_srgb,var(--theme-fg)_85%,transparent)]"><code>{`pveum user add dash@pve
 pveum acl modify / -user dash@pve -role PVEAuditor
+# optional: enables the start/stop/restart buttons
+pveum acl modify / -user dash@pve -role PVEVMAdmin
 pveum user token add dash@pve dash --privsep 0`}</code></pre>
+				<p class="mt-2 text-xs leading-5 text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+					PVEAuditor alone gives read-only status — the power buttons will show a permission
+					error until the token also has VM.PowerMgmt (PVEVMAdmin covers it).
+				</p>
 				<p class="mt-4 text-sm text-[color-mix(in_srgb,var(--theme-fg)_65%,transparent)]">
 					Docker hosts use your existing SSH key auth — the user just needs to run
 					<span class="font-mono text-[var(--theme-accent)]">docker ps</span>. Reload once the file is
@@ -236,7 +530,7 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 					</div>
 				{:else}
 					{#each proxmox.nodes as node (node.name)}
-						{@const cpuPct = pct(node.cpu * 100, node.maxcpu * 100) || Math.round(node.cpu * 100)}
+						{@const cpuPct = Math.min(100, Math.round(node.cpu * 100))}
 						{@const memPct = pct(node.memUsed, node.memTotal)}
 						{@const diskPct = pct(node.diskUsed, node.diskTotal)}
 						<div
@@ -296,39 +590,63 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 					{#if proxmox.guests.length}
 						<div class="mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
 							{#each proxmox.guests as guest (guest.id)}
+								{@const key = `pve:${guest.vmid}`}
 								{@const running = guest.status === 'running'}
 								{@const memPct = pct(guest.memUsed, guest.memTotal)}
-								<div
-									title={running ? `${guest.name} · ${bytes(guest.memUsed)} / ${bytes(guest.memTotal)}` : `Stopped · #${guest.vmid}`}
-									class={`flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${running ? 'hover:border-[color-mix(in_srgb,var(--theme-accent)_50%,transparent)]' : 'opacity-55'}`}
-								>
-									<span
-										class={`h-1.5 w-1.5 shrink-0 ${running ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'}`}
-									></span>
-									<span class="min-w-0 flex-1 truncate text-sm font-medium">{guest.name}</span>
-									<span
-										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)]"
+								{@const inFlight = pending[key]}
+								<div class={`relative ${openMenu === key ? 'z-30' : ''}`}>
+									<div
+										title={running ? `${guest.name} · ${bytes(guest.memUsed)} / ${bytes(guest.memTotal)}` : `Stopped · #${guest.vmid}`}
+										class={`group/row flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${running || inFlight ? 'hover:border-[color-mix(in_srgb,var(--theme-accent)_50%,transparent)]' : 'opacity-55'}`}
 									>
-										{guest.type === 'qemu' ? 'VM' : 'LXC'}
-									</span>
-									{#if running}
-										<span class="shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
-											{Math.round(guest.cpu * 100)}%
+										<span
+											class={`h-1.5 w-1.5 shrink-0 ${
+												inFlight
+													? 'animate-pulse bg-[var(--theme-warning)] shadow-[0_0_8px_var(--theme-warning)]'
+													: running
+														? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]'
+														: 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'
+											}`}
+										></span>
+										<span class="min-w-0 flex-1 truncate text-sm font-medium">{guest.name}</span>
+										<span
+											class="shrink-0 border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)]"
+										>
+											{guest.type === 'qemu' ? 'VM' : 'LXC'}
 										</span>
-										<span class="h-1 w-10 shrink-0 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
-											<span
-												class="block h-full transition-all duration-500"
-												style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
-											></span>
-										</span>
-										<span class="hidden shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)] md:inline">
-											{bytes(guest.memUsed)}
-										</span>
-									{:else}
-										<span class="shrink-0 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
-											stopped
-										</span>
-									{/if}
+										{#if inFlight}
+											<span class="shrink-0 text-[11px] text-[var(--theme-warning)]">
+												{PENDING_LABEL[inFlight.action]}
+											</span>
+										{:else if running}
+											<span class="shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
+												{Math.round(guest.cpu * 100)}%
+											</span>
+											<span class="h-1 w-10 shrink-0 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
+												<span
+													class="block h-full transition-all duration-500"
+													style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
+												></span>
+											</span>
+											<span class="hidden shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)] md:inline">
+												{bytes(guest.memUsed)}
+											</span>
+										{:else}
+											<span class="shrink-0 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
+												stopped
+											</span>
+										{/if}
+										{@render controlMenu(
+											key,
+											guest.name,
+											'?/guest',
+											[{ name: 'vmid', value: guest.vmid }],
+											running,
+											true,
+											false
+										)}
+									</div>
+									{@render cardError(key)}
 								</div>
 							{/each}
 						</div>
@@ -392,38 +710,67 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 
 					<div class="mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
 						{#each host.containers as container (container.name)}
+							{@const key = `docker:${host.name}/${container.name}`}
 							{@const running = container.state === 'running'}
 							{@const memPct = pct(container.memUsed, container.memLimit)}
 							{@const healthy = /\(healthy\)/.test(container.status)}
-							<div
-								title={`${container.image} · ${container.status || 'Stopped'}`}
-								class={`flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${running ? 'hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)]' : 'opacity-55'}`}
-							>
-								<span
-									class={`h-1.5 w-1.5 shrink-0 ${running ? (healthy ? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]' : 'bg-[var(--theme-color12,var(--theme-accent))] shadow-[0_0_8px_var(--theme-color12,var(--theme-accent))]') : 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'}`}
-								></span>
-								<span class="min-w-0 flex-1 truncate text-sm font-medium">{container.name}</span>
-								<span class="hidden max-w-32 shrink-0 truncate text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] lg:inline">
-									{shortImage(container.image)}
-								</span>
-								{#if running}
-									<span class="shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
-										{container.cpu.toFixed(1)}%
+							{@const inFlight = pending[key]}
+							<div class={`relative ${openMenu === key ? 'z-30' : ''}`}>
+								<div
+									title={`${container.image} · ${container.status || 'Stopped'}`}
+									class={`group/row flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${running || inFlight ? 'hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)]' : 'opacity-55'}`}
+								>
+									<span
+										class={`h-1.5 w-1.5 shrink-0 ${
+											inFlight
+												? 'animate-pulse bg-[var(--theme-warning)] shadow-[0_0_8px_var(--theme-warning)]'
+												: running
+													? healthy
+														? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]'
+														: 'bg-[var(--theme-color12,var(--theme-accent))] shadow-[0_0_8px_var(--theme-color12,var(--theme-accent))]'
+													: 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'
+										}`}
+									></span>
+									<span class="min-w-0 flex-1 truncate text-sm font-medium">{container.name}</span>
+									<span class="hidden max-w-32 shrink-0 truncate text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] lg:inline">
+										{shortImage(container.image)}
 									</span>
-									<span class="h-1 w-10 shrink-0 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
-										<span
-											class="block h-full transition-all duration-500"
-											style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
-										></span>
-									</span>
-									<span class="hidden shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)] md:inline">
-										{bytes(container.memUsed)}
-									</span>
-								{:else}
-									<span class="shrink-0 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
-										stopped
-									</span>
-								{/if}
+									{#if inFlight}
+										<span class="shrink-0 text-[11px] text-[var(--theme-warning)]">
+											{PENDING_LABEL[inFlight.action]}
+										</span>
+									{:else if running}
+										<span class="shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
+											{container.cpu.toFixed(1)}%
+										</span>
+										<span class="h-1 w-10 shrink-0 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
+											<span
+												class="block h-full transition-all duration-500"
+												style={`width: ${memPct}%; background: ${loadColor(memPct)}`}
+											></span>
+										</span>
+										<span class="hidden shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)] md:inline">
+											{bytes(container.memUsed)}
+										</span>
+									{:else}
+										<span class="shrink-0 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
+											stopped
+										</span>
+									{/if}
+									{@render controlMenu(
+										key,
+										container.name,
+										'?/container',
+										[
+											{ name: 'host', value: host.name },
+											{ name: 'name', value: container.name }
+										],
+										running,
+										false,
+										container.isSelf
+									)}
+								</div>
+								{@render cardError(key)}
 							</div>
 						{/each}
 					</div>
