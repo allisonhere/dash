@@ -8,11 +8,13 @@ import {
 	type DockerAction,
 	type DockerHostStatus
 } from './docker-ssh';
+import { loadNutUps, type NutUpsStatus } from './nut';
 
 export type HomelabStatus = {
 	configured: boolean;
 	proxmox: ProxmoxStatus | null;
 	dockerHosts: DockerHostStatus[];
+	ups: NutUpsStatus | null;
 };
 
 export type HomelabActionResult =
@@ -33,17 +35,18 @@ export async function loadHomelab(): Promise<HomelabStatus> {
 	const config = loadHomelabConfig();
 
 	if (!config) {
-		return { configured: false, proxmox: null, dockerHosts: [] };
+		return { configured: false, proxmox: null, dockerHosts: [], ups: null };
 	}
 
 	// Each collector resolves to a status object (never throws), so a single
 	// failing source can't take down the others.
-	const [proxmox, dockerHosts] = await Promise.all([
+	const [proxmox, dockerHosts, ups] = await Promise.all([
 		config.proxmox ? loadProxmox(config.proxmox) : Promise.resolve(null),
-		Promise.all(config.dockerHosts.map((host) => loadDockerHost(host)))
+		Promise.all(config.dockerHosts.map((host) => loadDockerHost(host))),
+		config.ups ? loadNutUps(config.ups) : Promise.resolve(null)
 	]);
 
-	const status: HomelabStatus = { configured: true, proxmox, dockerHosts };
+	const status: HomelabStatus = { configured: true, proxmox, dockerHosts, ups };
 	cache = { fetchedAt: Date.now(), status };
 	return status;
 }

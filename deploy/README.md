@@ -74,6 +74,8 @@ Key points in `compose.yaml`:
 - `/var/run/docker.sock:...:ro` lets the Homelab page read the host's containers
   (set a docker host with `"ssh": "local"` in `homelab.json`). Proxmox is reached
   over the LAN via the token in `homelab.json` — that file stays here, never leaves.
+- A NUT UPS can be added with `"ups": {"name":"Server UPS","host":"192.168.1.10","port":3493,"upsName":"cyberpower"}`.
+  The NUT server must allow read-only LAN connections from the Dash container.
 
 ## Match omarchy (optional)
 

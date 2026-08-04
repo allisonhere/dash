@@ -14,9 +14,17 @@ export type DockerHostConfig = {
 	ssh: string;
 };
 
+export type NutUpsConfig = {
+	name: string;
+	host: string;
+	port: number;
+	upsName: string;
+};
+
 export type HomelabConfig = {
 	proxmox: ProxmoxConfig | null;
 	dockerHosts: DockerHostConfig[];
+	ups: NutUpsConfig | null;
 };
 
 const HOMELAB_FILE = dashboardConfigPath('homelab.json');
@@ -42,12 +50,38 @@ export function loadHomelabConfig(): HomelabConfig | null {
 	const raw = parsed as Record<string, unknown>;
 	const proxmox = parseProxmox(raw.proxmox);
 	const dockerHosts = parseDockerHosts(raw.dockerHosts);
+	const ups = parseNutUps(raw.ups);
 
-	if (!proxmox && dockerHosts.length === 0) {
+	if (!proxmox && dockerHosts.length === 0 && !ups) {
 		return null;
 	}
 
-	return { proxmox, dockerHosts };
+	return { proxmox, dockerHosts, ups };
+}
+
+function parseNutUps(value: unknown): NutUpsConfig | null {
+	if (!value || typeof value !== 'object') {
+		return null;
+	}
+
+	const raw = value as Record<string, unknown>;
+	const host = str(raw.host);
+	const upsName = str(raw.upsName);
+	const configuredPort = typeof raw.port === 'number' ? raw.port : Number(raw.port);
+	const port = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65_535
+		? configuredPort
+		: 3493;
+
+	if (!host || !upsName || /[\s"\\]/.test(upsName)) {
+		return null;
+	}
+
+	return {
+		name: str(raw.name) || upsName,
+		host,
+		port,
+		upsName
+	};
 }
 
 export const homelabConfigPath = HOMELAB_FILE;

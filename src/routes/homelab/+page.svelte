@@ -166,6 +166,7 @@
 
 	const proxmox = $derived(data.proxmox);
 	const dockerHosts = $derived(data.dockerHosts);
+	const ups = $derived(data.ups);
 
 	const summary = $derived.by(() => {
 		let running = 0;
@@ -188,6 +189,10 @@
 		}
 
 		if (proxmox && !proxmox.reachable) {
+			down += 1;
+		}
+
+		if (ups && !ups.reachable) {
 			down += 1;
 		}
 
@@ -243,6 +248,14 @@
 
 	function shortImage(image: string): string {
 		return image.replace(/^.*\//, '').replace(/:latest$/, '');
+	}
+
+	function upsState(status: string[]): { label: string; color: string } {
+		if (status.includes('LB')) return { label: 'Low battery', color: 'var(--theme-danger)' };
+		if (status.includes('RB')) return { label: 'Replace battery', color: 'var(--theme-danger)' };
+		if (status.includes('OB')) return { label: 'On battery', color: 'var(--theme-warning)' };
+		if (status.includes('OL')) return { label: 'Online', color: 'var(--theme-success)' };
+		return { label: status.join(' · ') || 'Unknown', color: 'var(--theme-warning)' };
 	}
 
 	// SVG ring gauge geometry
@@ -485,7 +498,13 @@
   },
   "dockerHosts": [
     { "name": "services", "ssh": "user@10.0.0.3" }
-  ]
+  ],
+  "ups": {
+    "name": "Server UPS",
+    "host": "10.0.0.3",
+    "port": 3493,
+    "upsName": "cyberpower"
+  }
 }`}</code></pre>
 				<p class="mt-4 text-sm text-[color-mix(in_srgb,var(--theme-fg)_65%,transparent)]">
 					Create a Proxmox token (run in the node shell):
@@ -507,6 +526,54 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 			</div>
 		</section>
 	{:else}
+		{#if ups}
+			{@const state = upsState(ups.status)}
+			<section class="mt-6">
+				<div class="flex items-center gap-3">
+					<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-color10,var(--theme-accent))]">
+						UPS · {ups.name}
+					</h2>
+					{#if ups.reachable}
+						<span class="inline-flex items-center gap-1.5 text-xs" style={`color: ${state.color}`}>
+							<span class="h-1.5 w-1.5" style={`background: ${state.color}; box-shadow: 0 0 8px ${state.color}`}></span>
+							{state.label}
+						</span>
+					{/if}
+					<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-color10,var(--theme-accent))_45%,transparent)] to-transparent"></div>
+				</div>
+
+				{#if !ups.reachable}
+					<div class="mt-4 border border-[color-mix(in_srgb,var(--theme-danger)_45%,transparent)] bg-[color-mix(in_srgb,var(--theme-danger)_12%,transparent)] px-4 py-3 text-sm">
+						<span class="font-semibold">{ups.target} unreachable</span>
+						<span class="text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]"> — {ups.error}</span>
+					</div>
+				{:else}
+					<div class="mt-4 grid gap-5 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-5 backdrop-blur sm:grid-cols-[auto_1fr] sm:items-center">
+						<div class="flex items-center gap-6">
+							{#each [{ label: 'Battery', value: ups.charge }, { label: 'Load', value: ups.load }] as gauge (gauge.label)}
+								<div class="flex flex-col items-center gap-2">
+									<div class="relative grid h-[68px] w-[68px] place-items-center">
+										<svg viewBox="0 0 64 64" class="h-full w-full -rotate-90">
+											<circle cx="32" cy="32" r={RADIUS} fill="none" stroke="color-mix(in srgb, var(--theme-fg) 12%, transparent)" stroke-width="6" />
+											<circle cx="32" cy="32" r={RADIUS} fill="none" stroke={gauge.label === 'Battery' && gauge.value <= 20 ? 'var(--theme-danger)' : 'var(--theme-accent)'} stroke-width="6" stroke-linecap="round" stroke-dasharray={CIRCUMFERENCE} stroke-dashoffset={dashOffset(gauge.value)} style="transition: stroke-dashoffset 0.6s ease" />
+										</svg>
+										<span class="absolute text-sm font-semibold">{Math.round(gauge.value)}%</span>
+									</div>
+									<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]">{gauge.label}</span>
+								</div>
+							{/each}
+						</div>
+						<dl class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:border-l sm:border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] sm:pl-6 lg:grid-cols-4">
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Model</dt><dd class="font-medium">{ups.model || '—'}</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Runtime</dt><dd class="font-medium">{duration(ups.runtime)}</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Input / output</dt><dd class="font-medium tabular-nums">{ups.inputVoltage.toFixed(1)} / {ups.outputVoltage.toFixed(1)} V</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Power</dt><dd class="font-medium tabular-nums">{ups.realPower} W{ups.realPowerNominal ? ` / ${ups.realPowerNominal} W` : ''}</dd>
+						</dl>
+					</div>
+				{/if}
+			</section>
+		{/if}
+
 		{#if proxmox}
 			<section class="mt-6">
 				<div class="flex items-center gap-3">
