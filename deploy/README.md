@@ -67,6 +67,8 @@ DASH_URL=http://192.168.86.74:3939 \
 ```
 
 Key points in `compose.yaml`:
+- The container uses host networking and binds Dash directly to port `3939` so
+  its NUT collector can reach an UPS daemon on the Docker host at `127.0.0.1`.
 - The app trusts all CSRF origins because it is intended for LAN-only use and may
   be reached by IP, hostname, or reverse-proxy name. Restrict `csrf.trustedOrigins`
   in `vite.config.ts` before exposing it publicly.

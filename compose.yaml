@@ -7,11 +7,12 @@ services:
     image: ghcr.io/allisonhere/dash:latest
     container_name: dash
     restart: unless-stopped
-    ports:
-      # Host 3939 -> container 3000 (3000 is already used on jarvis).
-      # Reachable from every device on the LAN (desktops, phone).
-      - "3939:3000"
+    # Host networking lets the server-side NUT collector reach upsd on the
+    # Docker host's loopback interface without exposing NUT to the container
+    # bridge. Dash still listens on the same LAN port as before.
+    network_mode: host
     environment:
+      - PORT=3939
       # Read the bind-mounted omarchy folder below as if it were local, so the
       # "Match omarchy" theme option works here.
       - OMARCHY_DIR=/omarchy
