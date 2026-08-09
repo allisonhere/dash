@@ -5,7 +5,7 @@ dash runs as **one Docker container** on the LAN (e.g. the docker host
 edits (bookmarks, feeds, theme) write back to a mounted volume. No internet or
 webhost involved.
 
-- **Data** (`bookmarks.json`, `feeds.json`, `homelab.json`, `theme.json`) lives
+- **Data** (`bookmarks.json`, `feeds.json`, `groups.json`, `homelab.json`, `theme.json`) lives
   in the `./data` volume. Edits from any browser persist there.
 - **Built-in themes** are the default and work with zero setup.
 - **Match omarchy** reads a bind-mounted copy of your omarchy theme (see below).
@@ -29,6 +29,21 @@ docker compose up -d --build
 ```
 
 Open `http://<host-ip>:3939` from any device on the LAN.
+
+## Install as an app
+
+Dash includes a web app manifest, local app icons, and a service worker for its
+static assets. Open Dash over HTTPS, then use the browser's **Install app** or
+**Add to Home Screen** command. Browsers do not enable service workers for a
+plain HTTP LAN address; `localhost` is the development-only exception.
+
+## Backup and restore
+
+Open **Settings**, then use **Download backup** to export bookmarks, feeds,
+groups, and the selected theme in one versioned JSON file. The restore form
+validates the complete file before replacing current data. Homelab configuration
+and credentials are intentionally excluded, so continue backing up `./data`
+when you need a full server recovery copy.
 
 ## Update it from this repo
 

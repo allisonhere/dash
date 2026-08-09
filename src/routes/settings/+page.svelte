@@ -16,6 +16,8 @@
 
 	let newName = $state('');
 	let newColor = $state('');
+	let selectedBackupName = $state('');
+	let restoring = $state(false);
 
 	// Re-seed the row drafts whenever the server data changes, so a saved row
 	// snaps back to the persisted values instead of holding a stale edit. Rows
@@ -148,14 +150,19 @@
 		</p>
 		<h1 class="mt-2 text-4xl font-semibold text-[var(--theme-fg)] md:text-5xl">Settings</h1>
 		<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)]">
-			Bookmark groups, their colors, and where their bookmarks go when a group is removed.
+			Manage bookmark groups and keep a portable copy of your Dash data.
 		</p>
 	</header>
 
 	{#if form?.message}
 		<p
-			class="mt-5 border border-[color-mix(in_srgb,var(--theme-danger)_45%,transparent)] bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)] px-4 py-3 text-sm text-[var(--theme-fg)]"
+			class={`mt-5 border px-4 py-3 text-sm text-[var(--theme-fg)] ${
+				form.ok
+					? 'border-[color-mix(in_srgb,var(--theme-success)_45%,transparent)] bg-[color-mix(in_srgb,var(--theme-success)_14%,transparent)]'
+					: 'border-[color-mix(in_srgb,var(--theme-danger)_45%,transparent)] bg-[color-mix(in_srgb,var(--theme-danger)_14%,transparent)]'
+			}`}
 			transition:fade={{ duration: 120 }}
+			role="status"
 		>
 			{form.message}
 		</p>
@@ -294,5 +301,85 @@
 				No groups yet. Add one above, or create a bookmark and its group appears here.
 			</p>
 		{/if}
+	</section>
+
+	<section class="mt-12">
+		<div class="flex items-center gap-3">
+			<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
+				Backup and restore
+			</h2>
+			<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] to-transparent"></div>
+		</div>
+
+		<div
+			class="mt-4 grid border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] backdrop-blur md:grid-cols-[0.85fr_1.15fr]"
+		>
+			<div class="p-5 md:border-r md:border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)]">
+				<h3 class="text-base font-semibold text-[var(--theme-fg)]">Download backup</h3>
+				<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
+					Save bookmarks, feeds, groups, and the selected theme as one JSON file. Homelab credentials are excluded.
+				</p>
+				<a
+					href="/settings/backup"
+					download
+					class="mt-4 inline-flex border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-bg)] transition hover:-translate-y-px active:translate-y-px"
+				>
+					Download backup
+				</a>
+			</div>
+
+			<form
+				method="POST"
+				action="?/restore"
+				enctype="multipart/form-data"
+				class="border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] p-5 md:border-t-0"
+				use:enhance={() => {
+					restoring = true;
+					return async ({ update }) => {
+						await update();
+						restoring = false;
+					};
+				}}
+			>
+				<h3 class="text-base font-semibold text-[var(--theme-fg)]">Restore backup</h3>
+				<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
+					The file is fully checked before it replaces current data. The restore limit is 2 MB.
+				</p>
+
+				<label class="mt-4 block">
+					<span class="mb-2 block text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_72%,transparent)]">
+						Dash backup file
+					</span>
+					<input
+						type="file"
+						name="backup"
+						accept=".json,application/json"
+						required
+						onchange={(event) =>
+							(selectedBackupName = event.currentTarget.files?.[0]?.name ?? '')}
+						class="block w-full border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] text-xs text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)] outline-none file:mr-3 file:border-0 file:border-r file:border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] file:bg-[color-mix(in_srgb,var(--theme-fg)_7%,transparent)] file:px-3 file:py-2.5 file:text-xs file:font-semibold file:text-[var(--theme-fg)] focus:border-[var(--theme-accent)]"
+					/>
+				</label>
+
+				<label class="mt-3 flex items-start gap-2 text-xs leading-5 text-[color-mix(in_srgb,var(--theme-fg)_66%,transparent)]">
+					<input
+						type="checkbox"
+						name="confirm"
+						value="replace"
+						required
+						class="mt-1 accent-[var(--theme-accent)]"
+					/>
+					<span>I understand this replaces the current bookmarks, feeds, groups, and theme selection.</span>
+				</label>
+
+				<button
+					type="submit"
+					disabled={restoring || !selectedBackupName}
+					class="mt-4 border border-[color-mix(in_srgb,var(--theme-danger)_55%,transparent)] px-4 py-2 text-sm font-semibold text-[var(--theme-fg)] transition hover:bg-[color-mix(in_srgb,var(--theme-danger)_16%,transparent)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					{restoring ? 'Restoring…' : 'Restore data'}
+				</button>
+			</form>
+		</div>
 	</section>
 </main>

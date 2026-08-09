@@ -70,9 +70,9 @@
 			.filter((group) => group.bookmarks.length > 0)
 	);
 
-	const MAX_PINNED = 4;
+	const MAX_PINNED = 8;
 
-	// Tracked against the full unfiltered set so the pin cap and "x/4" badge stay
+	// Tracked against the full unfiltered set so the pin cap and count badge stay
 	// accurate even while a search or category filter hides some pinned cards.
 	const totalPinnedCount = $derived(
 		data.bookmarks.filter((bookmark) => Boolean(bookmark.pinnedAt)).length

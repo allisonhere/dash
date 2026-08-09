@@ -31,6 +31,19 @@ describe('dashboard icon resolver', () => {
 		assert.equal(candidates.at(-1), 'https://icons.duckduckgo.com/ip3/github.com.ico');
 	});
 
+	it('uses Azure Log Analytics for My Analytics', () => {
+		const candidates = iconCandidatesForBookmark({
+			title: 'My Analytics',
+			url: 'https://stats.alliehere.com/',
+			icon: '↗'
+		});
+
+		assert.equal(
+			candidates[0],
+			'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/azure-log-analytics-workspaces.svg'
+		);
+	});
+
 	it('supports explicit Dashboard Icons slugs in the fallback icon field', () => {
 		const candidates = iconCandidatesForBookmark({
 			title: 'Media',

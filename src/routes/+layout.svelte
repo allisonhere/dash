@@ -1,6 +1,5 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import { invalidate } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -109,6 +108,13 @@
 	}
 
 	onMount(() => {
+		if ('serviceWorker' in navigator) {
+			void navigator.serviceWorker.register('/service-worker.js').catch(() => {
+				// The app remains fully usable when service workers are unavailable,
+				// such as on an insecure LAN origin.
+			});
+		}
+
 		const raw = localStorage.getItem(LOCAL_THEME_KEY);
 
 		if (!raw) {
@@ -178,9 +184,17 @@
 	});
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	<link rel="icon" type="image/svg+xml" href="/icons/dash.svg" />
+	<link rel="apple-touch-icon" href="/icons/dash-180.png" />
+	<link rel="manifest" href="/manifest.webmanifest" />
+	<meta name="application-name" content="Dash" />
+	<meta name="apple-mobile-web-app-title" content="Dash" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="theme-color" content={effectiveTheme.colors.background ?? '#0e091d'} />
+</svelte:head>
 <div
-	class="relative isolate min-h-dvh text-[var(--theme-fg)]"
+	class="relative isolate min-h-dvh pb-16 text-[var(--theme-fg)] sm:pb-0"
 	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}`}
 >
 	<div class="fixed inset-0 -z-30 bg-[var(--theme-bg)]"></div>
@@ -206,6 +220,7 @@
 	{/if}
 
 	<nav
+		aria-label="Site"
 		class="sticky top-0 z-30 border-b border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_78%,transparent)] backdrop-blur"
 	>
 		<div class="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
@@ -214,10 +229,11 @@
 				dash
 			</a>
 
-			<div class="flex items-center gap-1">
+			<div class="hidden items-center gap-1 sm:flex">
 				{#each links as link (link.href)}
 					<a
 						href={link.href}
+						aria-current={isActive(link.href) ? 'page' : undefined}
 						class={`relative px-3 py-2 text-sm transition ${
 							isActive(link.href)
 								? 'font-semibold text-[var(--theme-fg)]'
@@ -323,4 +339,30 @@
 	</nav>
 
 	{@render children()}
+
+	<nav
+		aria-label="Primary"
+		class="fixed inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_88%,transparent)] px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
+	>
+		<div class="mx-auto grid h-14 max-w-md grid-cols-4">
+			{#each links as link (link.href)}
+				<a
+					href={link.href}
+					aria-current={isActive(link.href) ? 'page' : undefined}
+					class={`relative grid place-items-center px-1 text-[11px] font-medium transition active:translate-y-px ${
+						isActive(link.href)
+							? 'text-[var(--theme-fg)]'
+							: 'text-[color-mix(in_srgb,var(--theme-fg)_52%,transparent)]'
+					}`}
+				>
+					{#if isActive(link.href)}
+						<span
+							class="absolute inset-x-3 top-0 h-px bg-[var(--theme-accent)] shadow-[0_0_8px_var(--theme-accent)]"
+						></span>
+					{/if}
+					{link.label}
+				</a>
+			{/each}
+		</div>
+	</nav>
 </div>

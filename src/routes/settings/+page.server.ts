@@ -1,5 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import { countByGroup, createGroup, deleteGroup, listGroups, updateGroup } from '$lib/server/groups';
+import { restoreDashBackup } from '$lib/server/backup';
+
+const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
 
 export const load = async () => {
 	const [groups, counts] = await Promise.all([listGroups(), countByGroup()]);
@@ -44,6 +47,43 @@ export const actions = {
 			return { ok: true, intent: 'delete' };
 		} catch (error) {
 			return fail(400, { ok: false, intent: 'delete', message: getMessage(error) });
+		}
+	},
+
+	restore: async ({ request }) => {
+		const formData = await request.formData();
+		const backup = formData.get('backup');
+		const confirmed = formData.get('confirm') === 'replace';
+
+		if (!(backup instanceof File) || backup.size === 0) {
+			return fail(400, { ok: false, intent: 'restore', message: 'Choose a Dash backup file.' });
+		}
+
+		if (!confirmed) {
+			return fail(400, {
+				ok: false,
+				intent: 'restore',
+				message: 'Confirm that the backup should replace the current Dash data.'
+			});
+		}
+
+		if (backup.size > MAX_BACKUP_BYTES) {
+			return fail(400, {
+				ok: false,
+				intent: 'restore',
+				message: 'The backup is larger than the 2 MB restore limit.'
+			});
+		}
+
+		try {
+			const restored = await restoreDashBackup(await backup.text());
+			return {
+				ok: true,
+				intent: 'restore',
+				message: `Restored ${restored.bookmarks} bookmarks, ${restored.feeds} feeds, and ${restored.groups} groups.`
+			};
+		} catch (error) {
+			return fail(400, { ok: false, intent: 'restore', message: getMessage(error) });
 		}
 	}
 };

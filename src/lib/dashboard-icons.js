@@ -43,6 +43,7 @@ const HOST_ALIASES = new Map([
 	['forgejo', 'forgejo'],
 	['gitlab', 'gitlab'],
 	['github', 'github-light'],
+	['my-analytics', 'azure-log-analytics-workspaces'],
 	['youtube', 'youtube'],
 	['twitch', 'twitch'],
 	['pluto', 'pluto-tv'],

@@ -11,6 +11,25 @@ theme menu.
 
 See `deploy/README.md` for server deployment notes.
 
+## Isolated test environment
+
+Build and start the current checkout at `http://localhost:3940`:
+
+```sh
+npm run test:env
+```
+
+The test stack uses `compose.test.yaml`, its own `dash-test-data` volume, and no
+Docker socket or homelab credentials. Test data persists when the stack stops.
+
+```sh
+npm run test:env -- status
+npm run test:env -- logs
+npm run test:env -- down
+```
+
+Change `DASH_TEST_PORT` in `.env.test` if port 3940 is already in use.
+
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
 ## Creating a project

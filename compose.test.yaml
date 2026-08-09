@@ -1,0 +1,30 @@
+name: dash-test
+
+services:
+  dash-test:
+    build:
+      context: .
+    image: dash-test:local
+    container_name: dash-test
+    restart: "no"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      DASH_CONFIG_DIR: /config
+    ports:
+      - "${DASH_TEST_PORT:-3940}:3000"
+    volumes:
+      - dash-test-data:/config
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/bookmarks').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  dash-test-data:

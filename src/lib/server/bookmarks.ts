@@ -18,7 +18,7 @@ export type BookmarkInput = Pick<Bookmark, 'title' | 'url' | 'category' | 'icon'
 const DEFAULT_CATEGORY = 'General';
 const DEFAULT_ICON = '↗';
 
-export const MAX_PINNED = 4;
+export const MAX_PINNED = 8;
 
 export async function listBookmarks(): Promise<Bookmark[]> {
 	const parsed = await readCollection<unknown>('bookmarks');
