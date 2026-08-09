@@ -29,6 +29,8 @@ to `master`.
 
 - Raised the bookmark pin limit from four to eight.
 - Replaced the default Svelte favicon with the Dashboard Icons app mark.
+- Fixed the small-screen shell layout with a dedicated bottom navigation bar,
+  safe-area spacing, and desktop-only header navigation.
 
 ## 2026-08-04
 

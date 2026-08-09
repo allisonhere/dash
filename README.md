@@ -11,7 +11,8 @@ mounted at `/config`.
 - RSS and Atom feed reader with per-feed error reporting
 - Live Proxmox, Docker, and NUT UPS status with guarded power controls
 - Built-in themes plus local or server-side Omarchy theme matching
-- Installable PWA metadata, mobile navigation, and app icons
+- Responsive desktop and mobile navigation with safe-area spacing
+- Installable PWA metadata and app icons
 - Versioned backup and restore for bookmarks, feeds, groups, and theme selection
 
 ## Run with Docker Compose
