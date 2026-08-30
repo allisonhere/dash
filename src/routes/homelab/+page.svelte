@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
+	import { summarizeDockerHost } from '$lib/docker-summary.js';
 	import { fade, scale } from 'svelte/transition';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -248,6 +249,23 @@
 
 	function shortImage(image: string): string {
 		return image.replace(/^.*\//, '').replace(/:latest$/, '');
+	}
+
+	function dockerGauges(summary: ReturnType<typeof summarizeDockerHost>) {
+		return [
+			{
+				label: 'CPU',
+				value: Math.min(100, Math.round(summary.containerCpuTotal))
+			},
+			{
+				label: 'RAM',
+				value: summary.hostMemPercent
+			},
+			{
+				label: 'Disk',
+				value: summary.hostDiskPercent
+			}
+		];
 	}
 
 	function upsState(status: string[]): { label: string; color: string } {
@@ -696,36 +714,79 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 						<span class="text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]"> — {host.error}</span>
 					</div>
 				{:else}
-					{#if host.host}
-						{@const memPct = pct(host.host.memUsed, host.host.memTotal)}
-						<div
-							class="mt-4 flex flex-wrap items-center gap-x-7 gap-y-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-4 py-2.5 backdrop-blur"
-						>
-							<span class="inline-flex items-center gap-2 text-xs">
-								<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Load</span>
-								<span class="text-xs font-semibold tabular-nums">
-									{host.host.load.map((n) => n.toFixed(2)).join(' ')}
-								</span>
-							</span>
-							<span class="inline-flex items-center gap-2 text-xs">
-								<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">RAM</span>
-								<span class="h-1 w-16 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)]">
-									<span
-										class="block h-full transition-all duration-500"
-										style={`width: ${memPct}%; background: ${loadColor(memPct)}; box-shadow: 0 0 6px ${loadColor(memPct)}`}
-									></span>
-								</span>
-								<span class="font-semibold tabular-nums" style={`color: ${loadColor(memPct)}`}>{memPct}%</span>
-								<span class="hidden text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] md:inline">
-									{bytes(host.host.memUsed)} / {bytes(host.host.memTotal)}
-								</span>
-							</span>
-							<span class="inline-flex items-center gap-2 text-xs">
-								<span class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Uptime</span>
-								<span class="font-semibold">{host.host.uptime}</span>
-							</span>
+					{@const dockerSummary = summarizeDockerHost(host)}
+					<div
+						class="mt-4 grid gap-6 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-5 backdrop-blur sm:grid-cols-[auto_1fr]"
+					>
+						<div class="flex items-center gap-6">
+							{#each dockerGauges(dockerSummary) as gauge (gauge.label)}
+								<div class="flex flex-col items-center gap-2">
+									<div class="relative grid h-[68px] w-[68px] place-items-center">
+										<svg viewBox="0 0 64 64" class="h-full w-full -rotate-90">
+											<circle
+												cx="32"
+												cy="32"
+												r={RADIUS}
+												fill="none"
+												stroke="color-mix(in srgb, var(--theme-fg) 12%, transparent)"
+												stroke-width="6"
+											/>
+											<circle
+												cx="32"
+												cy="32"
+												r={RADIUS}
+												fill="none"
+												stroke={loadColor(gauge.value)}
+												stroke-width="6"
+												stroke-linecap="round"
+												stroke-dasharray={CIRCUMFERENCE}
+												stroke-dashoffset={dashOffset(gauge.value)}
+												style="transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease; filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 60%, transparent))"
+											/>
+										</svg>
+										<span class="absolute text-sm font-semibold">{gauge.value}%</span>
+									</div>
+									<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)]">
+										{gauge.label}
+									</span>
+								</div>
+							{/each}
 						</div>
-					{/if}
+
+						<dl class="grid grid-cols-2 content-center gap-x-6 gap-y-2 text-sm sm:border-l sm:border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] sm:pl-6">
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Host</dt>
+							<dd class="min-w-0 truncate font-medium">{host.name}</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Services</dt>
+							<dd class="font-medium">
+								<span class="text-[var(--theme-success)]">{dockerSummary.runningCount}</span>
+								<span class="text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]"> / </span>
+								<span class="text-[color-mix(in_srgb,var(--theme-fg)_62%,transparent)]">{dockerSummary.stoppedCount}</span>
+							</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Health</dt>
+							<dd
+								class={`inline-flex items-center gap-2 font-medium ${
+									dockerSummary.unhealthyCount ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-success)]'
+								}`}
+							>
+								<span
+									class={`h-1.5 w-1.5 ${
+										dockerSummary.unhealthyCount ? 'bg-[var(--theme-danger)]' : 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]'
+									}`}
+								></span>
+								{dockerSummary.unhealthyCount ? `${dockerSummary.unhealthyCount} unhealthy` : 'Healthy'}
+							</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Memory</dt>
+							<dd class="font-medium">{host.host ? `${bytes(host.host.memUsed)} used` : '—'}</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Load</dt>
+							<dd class="font-medium tabular-nums">
+								{host.host ? host.host.load.map((n) => n.toFixed(2)).join(' ') : '—'}
+							</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Disk</dt>
+							<dd class="font-medium">{host.host ? `${bytes(host.host.diskUsed)} used` : '—'}</dd>
+							<dt class="text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">Uptime</dt>
+							<dd class="min-w-0 truncate font-medium">{host.host?.uptime || '—'}</dd>
+						</dl>
+					</div>
 
 					<div class="mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
 						{#each host.containers as container (container.name)}

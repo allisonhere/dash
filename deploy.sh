@@ -14,9 +14,11 @@ NC='\033[0m'
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASH_BRANCH="${DASH_BRANCH:-master}"
 DASH_REMOTE="${DASH_REMOTE:-origin}"
-DASH_DEPLOY_HOST="${DASH_DEPLOY_HOST:-jarvis}"
+DASH_DEPLOY_HOST="${DASH_DEPLOY_HOST:-allie@jarvis}"
 DASH_REMOTE_DIR="${DASH_REMOTE_DIR:-~/dash}"
 DASH_URL="${DASH_URL:-http://192.168.86.74:3939}"
+DASH_SSH_CONFIG="${DASH_SSH_CONFIG-/dev/null}"
+DASH_SSH_IDENTITY="${DASH_SSH_IDENTITY-$HOME/.ssh/id_ed25519}"
 DEFAULT_COMMIT_MESSAGE="${DASH_COMMIT_MESSAGE:-chore: deploy dash}"
 
 STEP_START=0
@@ -66,6 +68,28 @@ format_time() {
 run_cmd() {
   echo -e "  ${DIM}$*${NC}"
   "$@"
+}
+
+ssh_args() {
+  if [ -n "$DASH_SSH_CONFIG" ]; then
+    printf '%s\n' -F "$DASH_SSH_CONFIG"
+  fi
+
+  if [ -n "$DASH_SSH_IDENTITY" ]; then
+    printf '%s\n' -i "$DASH_SSH_IDENTITY" -o IdentitiesOnly=yes
+  fi
+}
+
+run_ssh() {
+  local host=$1
+  shift
+  local args=()
+  while IFS= read -r arg; do
+    args+=("$arg")
+  done < <(ssh_args)
+
+  echo -e "  ${DIM}ssh ${args[*]} $host${NC}"
+  ssh "${args[@]}" "$host" "$@"
 }
 
 require_command() {
@@ -129,6 +153,8 @@ status_report() {
   echo -e "  ${BOLD}Host:${NC}     $DASH_DEPLOY_HOST"
   echo -e "  ${BOLD}Path:${NC}     $DASH_REMOTE_DIR"
   echo -e "  ${BOLD}URL:${NC}      $DASH_URL"
+  echo -e "  ${BOLD}SSH config:${NC} ${DASH_SSH_CONFIG:-default}"
+  echo -e "  ${BOLD}SSH key:${NC}  ${DASH_SSH_IDENTITY:-default}"
   echo ""
 }
 
@@ -219,7 +245,7 @@ push_to_github() {
 
 remote_deploy() {
   print_substep "Deploying on $DASH_DEPLOY_HOST..."
-  ssh "$DASH_DEPLOY_HOST" "set -euo pipefail; cd $DASH_REMOTE_DIR; git pull --ff-only $DASH_REMOTE $DASH_BRANCH; docker compose up -d --build; docker compose ps"
+  run_ssh "$DASH_DEPLOY_HOST" "set -euo pipefail; cd $DASH_REMOTE_DIR; git pull --ff-only $DASH_REMOTE $DASH_BRANCH; docker compose up -d --build; docker compose ps"
   print_success "Remote Docker Compose deploy finished"
 }
 
@@ -347,9 +373,11 @@ Usage:
 Environment overrides:
   DASH_BRANCH       Git branch to push and deploy       (default: master)
   DASH_REMOTE       Git remote name used by deploy      (default: origin)
-  DASH_DEPLOY_HOST  SSH host for the Docker server      (default: jarvis)
+  DASH_DEPLOY_HOST  SSH host for the Docker server      (default: allie@jarvis)
   DASH_REMOTE_DIR   Repo path on the Docker server      (default: ~/dash)
   DASH_URL          URL to verify after deploy          (default: http://192.168.86.74:3939)
+  DASH_SSH_CONFIG   SSH config file for deploy SSH      (default: /dev/null)
+  DASH_SSH_IDENTITY SSH private key for deploy SSH      (default: ~/.ssh/id_ed25519)
   DASH_COMMIT_MESSAGE Default non-interactive message   (default: chore: deploy dash)
 USAGE
 }

@@ -30,7 +30,14 @@ export type DockerHostStatus = {
 	target: string;
 	reachable: boolean;
 	error: string | null;
-	host: { load: number[]; memUsed: number; memTotal: number; uptime: string } | null;
+	host: {
+		load: number[];
+		memUsed: number;
+		memTotal: number;
+		diskUsed: number;
+		diskTotal: number;
+		uptime: string;
+	} | null;
 	containers: DockerContainer[];
 };
 
@@ -61,6 +68,7 @@ const REMOTE_SCRIPT = [
 	"echo '#HOST'",
 	'cat /proc/loadavg',
 	"free -b | awk '/^Mem:/{print $2, $3}'",
+	"df -B1 / | awk 'NR==2{print $3, $2}'",
 	'uptime -p'
 ].join('\n');
 
@@ -219,12 +227,15 @@ function parseHost(lines: string[]): DockerHostStatus['host'] {
 
 	const load = (lines[0] ?? '').split(/\s+/).slice(0, 3).map(Number);
 	const [memTotal, memUsed] = (lines[1] ?? '').split(/\s+/).map(Number);
-	const uptime = (lines[2] ?? '').replace(/^up\s+/, '');
+	const [diskUsed, diskTotal] = (lines[2] ?? '').split(/\s+/).map(Number);
+	const uptime = (lines[3] ?? '').replace(/^up\s+/, '');
 
 	return {
 		load: load.every(Number.isFinite) ? load : [0, 0, 0],
 		memUsed: Number.isFinite(memUsed) ? memUsed : 0,
 		memTotal: Number.isFinite(memTotal) ? memTotal : 0,
+		diskUsed: Number.isFinite(diskUsed) ? diskUsed : 0,
+		diskTotal: Number.isFinite(diskTotal) ? diskTotal : 0,
 		uptime
 	};
 }

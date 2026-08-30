@@ -55,7 +55,7 @@ From your local checkout:
 
 That runs the local Svelte checks, builds the production bundle, validates the
 Compose file, commits any local changes, pushes `master` to GitHub, then tells
-`jarvis:~/dash` to pull and rebuild:
+`allie@jarvis:~/dash` to pull and rebuild:
 
 ```bash
 cd ~/dash
@@ -75,7 +75,7 @@ Useful focused commands:
 Defaults can be overridden without editing the script:
 
 ```bash
-DASH_DEPLOY_HOST=jarvis \
+DASH_DEPLOY_HOST=allie@jarvis \
 DASH_REMOTE_DIR=~/dash \
 DASH_URL=http://192.168.86.74:3939 \
 ./deploy.sh full
