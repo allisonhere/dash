@@ -5,6 +5,14 @@ to `master`.
 
 ## Unreleased
 
+### Added
+
+- Added a link check in Settings that requests every bookmark and reports the
+  broken, unreachable, blocked, and moved ones. Results stream in over
+  server-sent events as each link is checked. LAN hosts are checked without TLS
+  verification, and only redirects that leave the host are reported.
+- Added unit tests for link-check classification, summarizing, and sorting.
+
 ### Changed
 
 - Replaced the generated Svelte README with setup, testing, data, deployment,

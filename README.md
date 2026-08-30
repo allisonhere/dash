@@ -123,6 +123,11 @@ The production Compose file mounts `./data` at `/config`.
 | `theme.json` | Theme mode and selected built-in theme |
 | `homelab.json` | Proxmox, Docker host, and NUT connection settings |
 
+Settings also has a link check that requests every bookmark and reports the
+broken, unreachable, blocked, and moved ones. Hosts on the LAN are checked
+without TLS verification because self-hosted services usually serve their own
+certificates.
+
 Settings can export and restore the first four data sets. The browser backup
 excludes `homelab.json` because it may contain access tokens. Back up the whole
 `./data` directory for server recovery.

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { cssColor, SWATCHES } from '$lib/group-color';
+	import { sortBySeverity, summarize } from '$lib/link-check.js';
 	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
 
@@ -9,10 +10,88 @@
 
 	type Draft = { name: string; color: string };
 
+	// Each check outcome gets a label, a theme color, and whether it counts as a
+	// problem worth showing when the healthy links are hidden.
+	const STATE_STYLE = {
+		broken: { label: 'Broken', color: 'var(--theme-danger)', problem: true },
+		unreachable: { label: 'Unreachable', color: 'var(--theme-danger)', problem: true },
+		blocked: { label: 'Blocked', color: 'var(--theme-warning)', problem: true },
+		redirect: { label: 'Redirect', color: 'var(--theme-info)', problem: true },
+		skipped: { label: 'Skipped', color: 'color-mix(in srgb, var(--theme-fg) 45%, transparent)', problem: false },
+		ok: { label: 'OK', color: 'var(--theme-success)', problem: false }
+	} as const;
+
 	let drafts = $state<Record<string, Draft>>({});
 	let openPicker = $state<string | null>(null);
 	let confirmingDelete = $state<string | null>(null);
 	let moveTo = $state<Record<string, string>>({});
+
+	type LinkResult = import('$lib/link-check.js').LinkResult;
+
+	let source: EventSource | null = null;
+	let checking = $state(false);
+	let checked = $state(0);
+	let checkTotal = $state(0);
+	let checkError = $state('');
+	let showHealthy = $state(false);
+	let results = $state<LinkResult[]>([]);
+
+	const summary = $derived(summarize(results));
+	const sorted = $derived(sortBySeverity(results));
+	const problems = $derived(sorted.filter((result) => STATE_STYLE[result.state].problem));
+	const visible = $derived(showHealthy ? sorted : problems);
+	const progress = $derived(checkTotal > 0 ? Math.round((checked / checkTotal) * 100) : 0);
+
+	function runLinkCheck() {
+		stopLinkCheck();
+
+		results = [];
+		checked = 0;
+		checkTotal = 0;
+		checkError = '';
+		checking = true;
+
+		source = new EventSource('/settings/link-check');
+
+		source.addEventListener('start', (event) => {
+			checkTotal = JSON.parse((event as MessageEvent).data).total;
+
+			if (checkTotal === 0) {
+				stopLinkCheck();
+			}
+		});
+
+		source.addEventListener('result', (event) => {
+			const payload = JSON.parse((event as MessageEvent).data);
+			results = [...results, payload.result];
+			checked = payload.done;
+		});
+
+		source.addEventListener('done', () => stopLinkCheck());
+
+		source.addEventListener('failed', (event) => {
+			checkError = JSON.parse((event as MessageEvent).data).message;
+			stopLinkCheck();
+		});
+
+		// A dropped connection ends the run rather than letting EventSource retry,
+		// which would restart the whole sweep from the beginning.
+		source.onerror = () => {
+			if (checking) {
+				checkError = results.length ? '' : 'The link check connection was lost.';
+			}
+
+			stopLinkCheck();
+		};
+	}
+
+	function stopLinkCheck() {
+		source?.close();
+		source = null;
+		checking = false;
+	}
+
+	$effect(() => () => stopLinkCheck());
 
 	let newName = $state('');
 	let newColor = $state('');
@@ -301,6 +380,143 @@
 				No groups yet. Add one above, or create a bookmark and its group appears here.
 			</p>
 		{/if}
+	</section>
+
+	<section class="mt-12">
+		<div class="flex items-center gap-3">
+			<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
+				Link check
+			</h2>
+			{#if summary.total > 0}
+				<span class="text-xs text-[color-mix(in_srgb,var(--theme-fg)_42%,transparent)]">
+					{summary.total}
+				</span>
+			{/if}
+			<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] to-transparent"></div>
+		</div>
+
+		<div
+			class="mt-4 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] backdrop-blur"
+		>
+			<div class="flex flex-wrap items-center gap-3 p-5">
+				<div class="min-w-0 flex-1">
+					<h3 class="text-base font-semibold text-[var(--theme-fg)]">Verify bookmark links</h3>
+					<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
+						Requests every bookmark and reports the ones that are dead, unreachable, or have moved.
+						LAN hosts are checked without TLS verification.
+					</p>
+				</div>
+
+				<button
+					type="button"
+					onclick={checking ? stopLinkCheck : runLinkCheck}
+					class={`shrink-0 border px-4 py-2 text-sm font-semibold transition hover:-translate-y-px active:translate-y-px ${
+						checking
+							? 'border-[color-mix(in_srgb,var(--theme-danger)_55%,transparent)] text-[var(--theme-fg)]'
+							: 'border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] text-[var(--theme-bg)]'
+					}`}
+				>
+					{checking ? 'Stop' : summary.total > 0 ? 'Check again' : 'Check links'}
+				</button>
+			</div>
+
+			{#if checking || summary.total > 0}
+				<div
+					class="border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] px-5 py-4"
+					transition:fade={{ duration: 120 }}
+				>
+					<div class="flex items-center gap-3">
+						<div
+							class="h-1.5 flex-1 overflow-hidden bg-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)]"
+						>
+							<div
+								class="h-full bg-[var(--theme-accent)] transition-[width] duration-300"
+								style={`width: ${progress}%`}
+							></div>
+						</div>
+						<span class="shrink-0 text-xs tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
+							{checked}/{checkTotal || summary.total}
+						</span>
+					</div>
+
+					<div class="mt-3 flex flex-wrap items-center gap-2">
+						{#each Object.entries(STATE_STYLE) as [state, style] (state)}
+							{@const count = summary[state as keyof typeof summary]}
+							{#if count > 0}
+								<span
+									class="flex items-center gap-1.5 border border-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)] px-2 py-1 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_75%,transparent)]"
+									transition:fade={{ duration: 120 }}
+								>
+									<span class="h-2 w-2" style={`background: ${style.color}`}></span>
+									{count}
+									{style.label}
+								</span>
+							{/if}
+						{/each}
+
+						{#if summary.ok + summary.skipped > 0}
+							<button
+								type="button"
+								onclick={() => (showHealthy = !showHealthy)}
+								class="ml-auto text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)] underline-offset-4 transition hover:text-[var(--theme-accent)] hover:underline"
+							>
+								{showHealthy ? 'Hide healthy links' : 'Show all links'}
+							</button>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			{#if checkError}
+				<p
+					class="border-t border-[color-mix(in_srgb,var(--theme-danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--theme-danger)_12%,transparent)] px-5 py-3 text-sm text-[var(--theme-fg)]"
+					role="status"
+				>
+					{checkError}
+				</p>
+			{/if}
+
+			{#if visible.length > 0}
+				<ul class="border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)]">
+					{#each visible as result (result.id)}
+						<li
+							style={`--state: ${STATE_STYLE[result.state].color}`}
+							class="relative border-b border-[color-mix(in_srgb,var(--theme-fg)_9%,transparent)] py-2.5 pl-5 pr-4 transition last:border-b-0 hover:bg-[color-mix(in_srgb,var(--theme-fg)_4%,transparent)]"
+							in:fade={{ duration: 150 }}
+						>
+							<div class="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-[var(--state)]"></div>
+
+							<div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+								<a
+									href={result.url}
+									target="_blank"
+									rel="noreferrer"
+									class="text-sm font-medium text-[var(--theme-fg)] underline-offset-4 transition hover:text-[var(--theme-accent)] hover:underline"
+								>
+									{result.title}
+								</a>
+								<span class="text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]">
+									{result.category}
+								</span>
+								<span class="ml-auto text-[11px] font-semibold text-[var(--state)]">
+									{STATE_STYLE[result.state].label}
+								</span>
+							</div>
+
+							<p class="mt-0.5 truncate text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)]">
+								{result.detail} · {result.url}
+							</p>
+						</li>
+					{/each}
+				</ul>
+			{:else if !checking && summary.total > 0}
+				<p
+					class="border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] px-5 py-4 text-sm text-[color-mix(in_srgb,var(--theme-fg)_60%,transparent)]"
+				>
+					Every bookmark answered. Nothing to fix.
+				</p>
+			{/if}
+		</div>
 	</section>
 
 	<section class="mt-12">
