@@ -1,6 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import { countByGroup, createGroup, deleteGroup, listGroups, updateGroup } from '$lib/server/groups';
 import { restoreDashBackup } from '$lib/server/backup';
+import { clampRadius } from '$lib/appearance';
+import { readAppearance, writeAppearance } from '$lib/server/appearance';
 
 const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
 
@@ -8,7 +10,8 @@ export const load = async () => {
 	const [groups, counts] = await Promise.all([listGroups(), countByGroup()]);
 
 	return {
-		groups: groups.map((group) => ({ ...group, count: counts[group.name] ?? 0 }))
+		groups: groups.map((group) => ({ ...group, count: counts[group.name] ?? 0 })),
+		appearance: readAppearance()
 	};
 };
 
@@ -48,6 +51,17 @@ export const actions = {
 		} catch (error) {
 			return fail(400, { ok: false, intent: 'delete', message: getMessage(error) });
 		}
+	},
+
+	appearance: async ({ request }) => {
+		const formData = await request.formData();
+
+		writeAppearance({
+			corners: formData.get('corners') === 'round' ? 'round' : 'sharp',
+			radius: clampRadius(formData.get('radius'))
+		});
+
+		return { ok: true, intent: 'appearance' };
 	},
 
 	restore: async ({ request }) => {

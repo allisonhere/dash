@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { cssColor, SWATCHES } from '$lib/group-color';
+	import { RADIUS_PRESETS } from '$lib/appearance';
 	import { sortBySeverity, summarize } from '$lib/link-check.js';
 	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
@@ -92,6 +93,21 @@
 	}
 
 	$effect(() => () => stopLinkCheck());
+
+	// Corner rounding previews locally the moment it changes, then the form saves
+	// it and the layout picks up the new value from the server.
+	let corners = $state<'sharp' | 'round'>(untrack(() => data.appearance.corners));
+	let radius = $state(untrack(() => data.appearance.radius));
+	let appearanceForm = $state<HTMLFormElement | null>(null);
+
+	$effect(() => {
+		corners = data.appearance.corners;
+		radius = data.appearance.radius;
+	});
+
+	function saveAppearance() {
+		appearanceForm?.requestSubmit();
+	}
 
 	let newName = $state('');
 	let newColor = $state('');
@@ -248,6 +264,124 @@
 	{/if}
 
 	<section class="mt-8">
+		<div class="flex items-center gap-3">
+			<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
+				Appearance
+			</h2>
+			<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] to-transparent"></div>
+		</div>
+
+		<form
+			method="POST"
+			action="?/appearance"
+			bind:this={appearanceForm}
+			use:enhance
+			class="mt-4 grid gap-5 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-5 backdrop-blur md:grid-cols-[1.2fr_0.8fr] md:items-start"
+		>
+			<input type="hidden" name="corners" value={corners} />
+			<input type="hidden" name="radius" value={radius} />
+
+			<div>
+				<h3 class="text-base font-semibold text-[var(--theme-fg)]">Card corners</h3>
+				<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
+					Sharp keeps the default hard-edged look. Round softens cards, panels, and controls
+					across every page on this dash.
+				</p>
+
+				<div class="mt-4 flex gap-2">
+					{#each [{ value: 'sharp', label: 'Sharp' }, { value: 'round', label: 'Round' }] as option (option.value)}
+						<button
+							type="button"
+							aria-pressed={corners === option.value}
+							onclick={() => {
+								corners = option.value as 'sharp' | 'round';
+								saveAppearance();
+							}}
+							class={`flex-1 border px-4 py-2 text-sm font-semibold transition hover:-translate-y-px ${
+								corners === option.value
+									? 'border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] text-[var(--theme-bg)]'
+									: 'border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]'
+							}`}
+						>
+							{option.label}
+						</button>
+					{/each}
+				</div>
+
+				<div class={`mt-5 transition ${corners === 'round' ? '' : 'pointer-events-none opacity-40'}`}>
+					<div class="flex items-baseline justify-between">
+						<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_72%,transparent)]">
+							Radius
+						</span>
+						<span class="text-xs tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+							{radius}px
+						</span>
+					</div>
+
+					<input
+						type="range"
+						min="2"
+						max="32"
+						step="1"
+						aria-label="Corner radius"
+						disabled={corners !== 'round'}
+						bind:value={radius}
+						onchange={saveAppearance}
+						class="mt-2 w-full accent-[var(--theme-accent)]"
+					/>
+
+					<div class="mt-3 flex flex-wrap gap-1.5">
+						{#each RADIUS_PRESETS as preset (preset.value)}
+							<button
+								type="button"
+								disabled={corners !== 'round'}
+								aria-pressed={radius === preset.value}
+								onclick={() => {
+									radius = preset.value;
+									saveAppearance();
+								}}
+								class={`border px-2.5 py-1 text-xs transition ${
+									radius === preset.value
+										? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
+										: 'border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] text-[color-mix(in_srgb,var(--theme-fg)_62%,transparent)] hover:border-[var(--theme-accent)]'
+								}`}
+							>
+								{preset.label}
+							</button>
+						{/each}
+					</div>
+				</div>
+			</div>
+
+			<div
+				data-corners={corners}
+				style={`--dash-radius: ${radius}px`}
+				class="grid gap-2"
+			>
+				<span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+					Preview
+				</span>
+				<div
+					class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_70%,transparent)] p-4"
+				>
+					<span class="block h-2 w-16 bg-[var(--theme-accent)]"></span>
+					<p class="mt-3 text-sm font-medium text-[var(--theme-fg)]">Sample card</p>
+					<p class="mt-1 text-xs text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
+						Bookmarks, feeds, and homelab tiles follow this shape.
+					</p>
+					<button
+						type="button"
+						tabindex="-1"
+						class="mt-3 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-bg)]"
+					>
+						Button
+					</button>
+				</div>
+			</div>
+		</form>
+	</section>
+
+	<section class="mt-12">
 		<div class="flex items-center gap-3">
 			<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
 				Groups

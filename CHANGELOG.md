@@ -12,6 +12,10 @@ to `master`.
   server-sent events as each link is checked. LAN hosts are checked without TLS
   verification, and only redirects that leave the host are reported.
 - Added unit tests for link-check classification, summarizing, and sorting.
+- Added a card-corner setting in Settings → Appearance. Corners stay sharp by
+  default; switching to round applies a radius (2-32px, with presets) to cards,
+  panels, and controls across every page. The choice is stored per instance in
+  `appearance.json` alongside the theme selection.
 
 ### Changed
 

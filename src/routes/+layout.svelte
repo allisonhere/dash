@@ -195,7 +195,8 @@
 </svelte:head>
 <div
 	class="relative isolate min-h-dvh pb-16 text-[var(--theme-fg)] sm:pb-0"
-	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}`}
+	data-corners={data.appearance.corners}
+	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}; --dash-radius: ${data.appearance.radius}px`}
 >
 	<div class="fixed inset-0 -z-30 bg-[var(--theme-bg)]"></div>
 

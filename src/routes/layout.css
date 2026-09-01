@@ -15,3 +15,31 @@ body {
 	color: var(--theme-selection-foreground);
 	background: var(--theme-selection-background);
 }
+
+/* Corner rounding is a single global preference (Settings → Appearance), and
+   --dash-radius is set on the themed root in +layout.svelte. Surfaces here are
+   built from Tailwind arbitrary-value classes rather than shared components, so
+   one attribute-scoped rule rounds every card instead of a radius class on a
+   hundred elements. Full-bleed layers, bars, and elements whose border is just
+   a divider (border-t/b/l/r) stay square, and a nested data-corners='sharp'
+   subtree (the settings preview) opts back out. */
+[data-corners='round']
+	:is([class*='border-['], [class*='bg-[color-mix']):not(nav):not([class~='fixed']):not(
+		[class~='sticky']
+	):not([class~='border-t']):not([class~='border-b']):not([class~='border-l']):not(
+		[class~='border-r']
+	):not([class~='md:border-r']):not([class~='md:border-t-0']):not([class~='h-px']):not(
+		[data-corners='sharp'] *
+	) {
+	border-radius: var(--dash-radius);
+}
+
+/* Each settings row paints a full-height accent bar down its left edge, which
+   would otherwise poke out of the rounded list above and below it. */
+[data-corners='round'] ul[class*='border-['] > li:first-child > [class~='left-0'] {
+	border-top-left-radius: var(--dash-radius);
+}
+
+[data-corners='round'] ul[class*='border-['] > li:last-child > [class~='left-0'] {
+	border-bottom-left-radius: var(--dash-radius);
+}
