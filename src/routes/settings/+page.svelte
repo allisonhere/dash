@@ -4,7 +4,7 @@
 	import { RADIUS_PRESETS } from '$lib/appearance';
 	import { sortBySeverity, summarize } from '$lib/link-check.js';
 	import { fade } from 'svelte/transition';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 
 	let { data, form }: { data: import('./$types').PageData; form: import('./$types').ActionData } =
 		$props();
@@ -105,7 +105,11 @@
 		radius = data.appearance.radius;
 	});
 
-	function saveAppearance() {
+	// The form posts the hidden inputs, which Svelte only updates once the
+	// current change has flushed to the DOM — submitting in the same tick would
+	// save the previous values and snap the control straight back.
+	async function saveAppearance() {
+		await tick();
 		appearanceForm?.requestSubmit();
 	}
 
