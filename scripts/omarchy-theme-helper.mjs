@@ -8,7 +8,15 @@ const PORT = Number(process.env.OMARCHY_HELPER_PORT ?? 43741);
 const HOST = '127.0.0.1';
 const OMARCHY_DIR =
 	process.env.OMARCHY_DIR?.trim() || join(homedir(), '.config', 'omarchy');
-const CURRENT_DIR = join(OMARCHY_DIR, 'current');
+
+// Omarchy 4 keeps the live theme in the XDG state dir; 3.x kept it under the
+// config dir. Resolve once at startup, newest layout first.
+const OMARCHY_STATE_DIR =
+	process.env.OMARCHY_STATE_DIR?.trim() ||
+	join(process.env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'omarchy');
+const CURRENT_DIR = [join(OMARCHY_STATE_DIR, 'current'), join(OMARCHY_DIR, 'current')].find(
+	(candidate) => existsSync(candidate)
+) ?? join(OMARCHY_DIR, 'current');
 const CURRENT_THEME_DIR = join(CURRENT_DIR, 'theme');
 
 const CORS_HEADERS = {
@@ -66,7 +74,7 @@ server.listen(PORT, HOST, () => {
 	armWatchers();
 	setInterval(pollForChanges, 1000);
 	console.log(`Omarchy theme helper listening at http://${HOST}:${PORT}`);
-	console.log(`Reading ${OMARCHY_DIR}`);
+	console.log(`Reading ${CURRENT_DIR}`);
 });
 
 server.on('error', (error) => {

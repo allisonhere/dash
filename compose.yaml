@@ -21,8 +21,10 @@ services:
       # to this dir, and it persists across restarts. Seed it with your JSON.
       - ./data:/config
       # Your omarchy theme, read-only. "Match omarchy" reads this. It's a copy —
-      # re-sync it (rsync -aL ~/.config/omarchy/current/ jarvis:~/dash/omarchy/current/)
-      # when you change your desktop theme and want the dashboard to follow.
+      # re-sync it when you change your desktop theme and want the dashboard to
+      # follow. Omarchy 4 keeps the live theme in the state dir:
+      # rsync -aL ~/.local/state/omarchy/current/ jarvis:~/dash/omarchy/current/
+      # (on Omarchy 3 the source is ~/.config/omarchy/current/ instead).
       - ./omarchy:/omarchy:ro
       # Lets the homelab page read the host's containers (config a docker host
       # with "ssh": "local"). Read-only.

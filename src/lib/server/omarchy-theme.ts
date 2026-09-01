@@ -6,12 +6,35 @@ import { env } from '$env/dynamic/private';
 // OMARCHY_DIR lets the container read a bind-mounted omarchy folder as if it
 // were local. Defaults to ~/.config/omarchy on a desktop.
 const OMARCHY_CONFIG_DIR = env.OMARCHY_DIR?.trim() || join(homedir(), '.config', 'omarchy');
-const THEMES_DIR = join(OMARCHY_CONFIG_DIR, 'themes');
-const ACTIVE_THEME_NAME = join(OMARCHY_CONFIG_DIR, 'current', 'theme.name');
-const CURRENT_THEME_LINK = join(OMARCHY_CONFIG_DIR, 'current', 'theme');
-const CURRENT_BACKGROUND_LINK = join(OMARCHY_CONFIG_DIR, 'current', 'background');
 
-export const OMARCHY_CURRENT_DIR = join(OMARCHY_CONFIG_DIR, 'current');
+// Omarchy 4 moved the live theme out of the config dir and into the XDG state
+// dir; 3.x and the bind-mounted container copy still keep it under the config
+// dir. Both layouts are supported, newest first, and OMARCHY_STATE_DIR /
+// OMARCHY_DATA_DIR override the lookup the same way OMARCHY_DIR does.
+const OMARCHY_STATE_DIR =
+	env.OMARCHY_STATE_DIR?.trim() ||
+	join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'omarchy');
+const OMARCHY_DATA_DIR =
+	env.OMARCHY_DATA_DIR?.trim() ||
+	join(env.XDG_DATA_HOME?.trim() || join(homedir(), '.local', 'share'), 'omarchy');
+
+// User themes live beside the config, the shipped ones beside the install.
+const THEME_DIRS = [join(OMARCHY_CONFIG_DIR, 'themes'), join(OMARCHY_DATA_DIR, 'themes')];
+
+// Resolved per call rather than at import: an omarchy upgrade moves this
+// directory, and a long-running dash should follow it without a restart.
+export function omarchyCurrentDir(): string | null {
+	for (const candidate of [
+		join(OMARCHY_STATE_DIR, 'current'),
+		join(OMARCHY_CONFIG_DIR, 'current')
+	]) {
+		if (existsSync(candidate)) {
+			return candidate;
+		}
+	}
+
+	return null;
+}
 
 export type OmarchyColorKey =
 	| 'accent'
@@ -78,11 +101,17 @@ const SETTING_ALIAS: Record<string, OmarchySettingKey> = {
 };
 
 export function loadOmarchyTheme(nameOverride?: string): OmarchyTheme {
+	const currentDir = omarchyCurrentDir();
+	const currentThemeDir = currentDir ? join(currentDir, 'theme') : null;
 	const currentName = readThemeName();
 	const name = nameOverride?.trim() || currentName;
 	const isCurrentTheme = normalizeName(name) === normalizeName(currentName);
+
+	// The active theme is a full copy under current/, so it stays authoritative
+	// for the theme in use; anything else is looked up by name.
 	const themeDir =
-		findThemeDirectory(name) ?? (isCurrentTheme && existsSync(CURRENT_THEME_LINK) ? CURRENT_THEME_LINK : null);
+		(isCurrentTheme && currentThemeDir && existsSync(currentThemeDir) ? currentThemeDir : null) ??
+		findThemeDirectory(name);
 
 	// colors.toml is authoritative when present; alacritty.toml is the universal
 	// fallback since every omarchy theme ships one, then walker.css / hyprland.conf
@@ -151,19 +180,29 @@ export function composeTheme(input: {
 	};
 }
 
+// "Match omarchy" follows the desktop's live theme, so it is only offered when
+// that live theme is actually readable — a config dir full of theme folders
+// with no current/ to point at is not enough.
 export function omarchyAvailable(): boolean {
-	return existsSync(OMARCHY_CONFIG_DIR);
+	return omarchyCurrentDir() !== null;
 }
 
 export function listOmarchyThemes(): string[] {
-	if (!existsSync(THEMES_DIR)) {
-		return [];
+	const names = new Set<string>();
+
+	for (const themesDir of THEME_DIRS) {
+		if (!existsSync(themesDir)) {
+			continue;
+		}
+
+		for (const entry of readdirSync(themesDir, { withFileTypes: true })) {
+			if (entry.isDirectory()) {
+				names.add(entry.name);
+			}
+		}
 	}
 
-	return readdirSync(THEMES_DIR, { withFileTypes: true })
-		.filter((entry) => entry.isDirectory())
-		.map((entry) => entry.name)
-		.sort();
+	return [...names].sort();
 }
 
 export function parseOmarchyThemeToml(toml: string): ParsedThemeToml {
@@ -350,9 +389,12 @@ function readHyprlandBorder(themeDir: string | null): string | undefined {
 }
 
 function findBackground(themeDir: string | null, isCurrentTheme: boolean): string | null {
-	if (isCurrentTheme && existsSync(CURRENT_BACKGROUND_LINK)) {
+	const currentDir = omarchyCurrentDir();
+	const currentBackground = currentDir ? join(currentDir, 'background') : null;
+
+	if (isCurrentTheme && currentBackground && existsSync(currentBackground)) {
 		try {
-			return realpathSync(CURRENT_BACKGROUND_LINK);
+			return realpathSync(currentBackground);
 		} catch {
 			// fall through to the theme's backgrounds directory
 		}
@@ -384,22 +426,32 @@ function safeMtime(path: string): number | null {
 }
 
 function findThemeDirectory(themeName: string): string | null {
-	if (!existsSync(THEMES_DIR)) {
+	if (!themeName.trim()) {
 		return null;
 	}
 
 	const normalizedThemeName = normalizeName(themeName);
+	const slug = themeName.trim().toLowerCase().replaceAll(/\s+/g, '-');
 
-	for (const entry of readdirSync(THEMES_DIR, { withFileTypes: true })) {
-		if (entry.isDirectory() && normalizeName(entry.name) === normalizedThemeName) {
-			return join(THEMES_DIR, entry.name);
+	for (const themesDir of THEME_DIRS) {
+		if (!existsSync(themesDir)) {
+			continue;
+		}
+
+		for (const entry of readdirSync(themesDir, { withFileTypes: true })) {
+			if (entry.isDirectory() && normalizeName(entry.name) === normalizedThemeName) {
+				return join(themesDir, entry.name);
+			}
+		}
+
+		const slugPath = join(themesDir, slug);
+
+		if (existsSync(slugPath)) {
+			return slugPath;
 		}
 	}
 
-	const slug = themeName.trim().toLowerCase().replaceAll(/\s+/g, '-');
-	const slugPath = join(THEMES_DIR, slug);
-
-	return existsSync(slugPath) ? slugPath : null;
+	return null;
 }
 
 function cssVariablesToText(variables: Record<string, string>): string {
@@ -409,11 +461,29 @@ function cssVariablesToText(variables: Record<string, string>): string {
 }
 
 function readThemeName(): string {
-	if (!existsSync(ACTIVE_THEME_NAME)) {
-		return basename(CURRENT_THEME_LINK);
+	const currentDir = omarchyCurrentDir();
+
+	if (!currentDir) {
+		return '';
 	}
 
-	return readFileSync(ACTIVE_THEME_NAME, 'utf8').trim() || basename(CURRENT_THEME_LINK);
+	const nameFile = join(currentDir, 'theme.name');
+
+	// Older layouts symlink current/theme at the theme directory and ship no
+	// theme.name, so the link target names the theme.
+	const linked = () => {
+		try {
+			return basename(realpathSync(join(currentDir, 'theme')));
+		} catch {
+			return '';
+		}
+	};
+
+	if (!existsSync(nameFile)) {
+		return linked();
+	}
+
+	return readFileSync(nameFile, 'utf8').trim() || linked();
 }
 
 function normalizeColorKey(key: string): OmarchyColorKey | null {

@@ -103,18 +103,23 @@ appears in the theme picker and applies your desktop colors.
 Sync your omarchy theme to the host running the container (from an omarchy desktop):
 
 ```bash
-rsync -aL ~/.config/omarchy/current/ jarvis:~/dash/omarchy/current/
+rsync -aL ~/.local/state/omarchy/current/ jarvis:~/dash/omarchy/current/
 ```
+
+Omarchy 4 moved the live theme to `~/.local/state/omarchy/current`; on Omarchy 3
+copy `~/.config/omarchy/current/` instead. Dash reads whichever layout is
+present, and `OMARCHY_STATE_DIR` overrides the state-dir lookup the way
+`OMARCHY_DIR` overrides the config one.
 
 Re-run that whenever you change your desktop theme and want the dashboard to
 follow, then reload the page (or it picks it up on next load). If you run dash
 directly on an omarchy desktop instead of a container, drop the `OMARCHY_DIR`
-env and it reads `~/.config/omarchy` live.
+env and it reads the desktop's live theme directly.
 
 ## This device's Omarchy (optional)
 
 When dash is deployed on `192.168.86.74`, the container cannot read the
-desktop's live `~/.config/omarchy` directly. Start the local helper on each
+desktop's live omarchy directory directly. Start the local helper on each
 Omarchy desktop that should drive its own browser theme:
 
 ```bash
@@ -123,8 +128,8 @@ npm run omarchy:helper
 
 Then open dash, use the theme menu, and choose **This device's Omarchy**. The
 choice is stored in that browser only. The helper watches
-`~/.config/omarchy/current`, so changing your Omarchy theme updates the open dash
-tab automatically.
+the live `current` directory (`~/.local/state/omarchy/current` on Omarchy 4), so
+changing your Omarchy theme updates the open dash tab automatically.
 
 To start it automatically after login, install the user service from this repo:
 

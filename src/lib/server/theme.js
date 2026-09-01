@@ -4,5 +4,5 @@ export {
 	parseOmarchyThemeToml,
 	parseAlacrittyToml,
 	themeToCssVariables,
-	OMARCHY_CURRENT_DIR
+	omarchyCurrentDir
 } from './omarchy-theme';

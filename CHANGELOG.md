@@ -17,6 +17,15 @@ to `master`.
   panels, and controls across every page. The choice is stored per instance in
   `appearance.json` alongside the theme selection.
 
+### Fixed
+
+- Fixed "Match omarchy" on Omarchy 4, which moved the live theme from
+  `~/.config/omarchy/current` to `~/.local/state/omarchy/current`. Both layouts
+  are read, newest first, and themes are now found in the shipped theme
+  directory as well as the user's. The same fix stops the local Omarchy helper
+  from crash-looping on Omarchy 4. "Match omarchy" is only offered when a live
+  theme is actually readable, rather than whenever a config directory exists.
+
 ### Changed
 
 - Replaced the generated Svelte README with setup, testing, data, deployment,

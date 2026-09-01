@@ -1,5 +1,5 @@
 import { existsSync, watch, type FSWatcher } from 'node:fs';
-import { OMARCHY_CURRENT_DIR } from '$lib/server/omarchy-theme';
+import { omarchyCurrentDir } from '$lib/server/omarchy-theme';
 
 // Server-sent events: notify open pages when the local omarchy theme changes so
 // they can restyle in place. Only meaningful when an omarchy dir is present
@@ -22,9 +22,11 @@ export const GET = () => {
 
 			emit('retry: 2000\n\n');
 
-			if (existsSync(OMARCHY_CURRENT_DIR)) {
+			const currentDir = omarchyCurrentDir();
+
+			if (currentDir && existsSync(currentDir)) {
 				try {
-					watcher = watch(OMARCHY_CURRENT_DIR, () => {
+					watcher = watch(currentDir, () => {
 						if (debounce) {
 							clearTimeout(debounce);
 						}
