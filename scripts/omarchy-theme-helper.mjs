@@ -5,7 +5,7 @@ import { basename, join } from 'node:path';
 import { createServer } from 'node:http';
 
 const PORT = Number(process.env.OMARCHY_HELPER_PORT ?? 43741);
-const HOST = '127.0.0.1';
+const HOST = process.env.OMARCHY_HELPER_HOST?.trim() || '127.0.0.1';
 const OMARCHY_DIR =
 	process.env.OMARCHY_DIR?.trim() || join(homedir(), '.config', 'omarchy');
 

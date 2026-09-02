@@ -1,13 +1,15 @@
 <script lang="ts">
 	import './layout.css';
 	import { page } from '$app/state';
-	import { invalidate } from '$app/navigation';
-	import { onMount } from 'svelte';
-	import { fade, scale } from 'svelte/transition';
+	import { goto, invalidate } from '$app/navigation';
+	import { tick, onMount } from 'svelte';
+	import { fade, fly, scale } from 'svelte/transition';
+	import { rankCommands } from '$lib/command-palette.js';
 	import type { Snippet } from 'svelte';
 	import { composeThemeFromLocalPayload } from '$lib/omarchy-theme-core.js';
 
 	type Theme = import('./$types').LayoutData['theme'];
+	type PaletteCommand = import('$lib/command-palette.js').PaletteCommand;
 
 	let { children, data }: { children: Snippet; data: import('./$types').LayoutData } = $props();
 
@@ -29,7 +31,18 @@
 	let localOmarchy = $state(false);
 	let localError = $state('');
 	let localTheme = $state<Theme | null>(null);
+	let paletteOpen = $state(false);
+	let paletteQuery = $state('');
+	let paletteLoading = $state(false);
+	let paletteError = $state('');
+	let paletteCommands = $state<PaletteCommand[]>([]);
+	let paletteIndex = $state(0);
+	let confirmingCommand = $state<string | null>(null);
+	let runningCommand = $state<string | null>(null);
+	let paletteInput = $state<HTMLInputElement>();
+	let localHelperDraft = $state('');
 	const effectiveTheme = $derived(localTheme ?? data.theme);
+	const paletteResults = $derived(rankCommands(paletteCommands, paletteQuery, 12));
 
 	const inOmarchyMode = $derived(data.selection.mode === 'omarchy');
 
@@ -69,6 +82,8 @@
 		localError = '';
 
 		try {
+			const helperUrl = normalizeLocalHelperUrl(localHelperDraft);
+			localStorage.setItem(LOCAL_HELPER_URL_KEY, helperUrl);
 			await refreshLocalOmarchy();
 			localOmarchy = true;
 			pickerOpen = false;
@@ -107,6 +122,199 @@
 		return localStorage.getItem(LOCAL_HELPER_URL_KEY)?.trim() || LOCAL_HELPER_URL;
 	}
 
+	function normalizeLocalHelperUrl(value: string) {
+		const raw = value.trim() || LOCAL_HELPER_URL;
+		const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`;
+
+		try {
+			const url = new URL(withProtocol);
+			return url.toString().replace(/\/+$/, '');
+		} catch {
+			throw new Error('Omarchy helper URL is invalid.');
+		}
+	}
+
+	async function openPalette() {
+		paletteOpen = true;
+		paletteQuery = '';
+		paletteIndex = 0;
+		confirmingCommand = null;
+		await tick();
+		paletteInput?.focus();
+
+		if (paletteCommands.length === 0) {
+			await loadPaletteCommands();
+		}
+	}
+
+	function closePalette() {
+		paletteOpen = false;
+		paletteQuery = '';
+		paletteIndex = 0;
+		confirmingCommand = null;
+		paletteError = '';
+	}
+
+	async function loadPaletteCommands() {
+		paletteLoading = true;
+		paletteError = '';
+
+		try {
+			const response = await fetch('/command-palette', { cache: 'no-store' });
+
+			if (!response.ok) {
+				throw new Error(`Command index failed (${response.status})`);
+			}
+
+			const body = (await response.json()) as { commands?: PaletteCommand[] };
+			paletteCommands = body.commands ?? [];
+		} catch (error) {
+			paletteError = error instanceof Error ? error.message : 'Command index failed.';
+		} finally {
+			paletteLoading = false;
+		}
+	}
+
+	function onWindowKeydown(event: KeyboardEvent) {
+		const target = event.target as HTMLElement;
+		const typing =
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target?.isContentEditable;
+
+		if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+			event.preventDefault();
+			paletteOpen ? closePalette() : void openPalette();
+			return;
+		}
+
+		if (!paletteOpen || typing) {
+			return;
+		}
+
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closePalette();
+		}
+	}
+
+	function onPaletteKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closePalette();
+			return;
+		}
+
+		if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			paletteIndex = Math.min(paletteResults.length - 1, paletteIndex + 1);
+			confirmingCommand = null;
+			return;
+		}
+
+		if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			paletteIndex = Math.max(0, paletteIndex - 1);
+			confirmingCommand = null;
+			return;
+		}
+
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			const command = paletteResults[paletteIndex];
+
+			if (command) {
+				void runCommand(command);
+			}
+		}
+	}
+
+	async function runCommand(command: PaletteCommand) {
+		if (runningCommand) {
+			return;
+		}
+
+		if (command.danger && confirmingCommand !== command.id) {
+			confirmingCommand = command.id;
+			return;
+		}
+
+		runningCommand = command.id;
+		paletteError = '';
+
+		try {
+			if (command.kind === 'navigate' && command.href) {
+				await goto(command.href);
+				closePalette();
+				return;
+			}
+
+			if (command.kind === 'bookmark' && command.url) {
+				window.open(command.url, '_blank', 'noreferrer');
+				void fetch('/command-palette', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ kind: command.kind, id: command.id }),
+					keepalive: true
+				});
+				closePalette();
+				return;
+			}
+
+			if (command.kind === 'service-open' && command.url) {
+				window.open(command.url, '_blank', 'noreferrer');
+				closePalette();
+				return;
+			}
+
+			if ((command.kind === 'service-inspect' || command.kind === 'service-logs') && command.href) {
+				await goto(command.href);
+				closePalette();
+				return;
+			}
+
+			if (command.kind === 'docker-control') {
+				const response = await fetch('/command-palette', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						kind: command.kind,
+						id: command.id,
+						host: command.host,
+						name: command.name,
+						action: command.action,
+						confirm: command.danger ? command.id : undefined
+					})
+				});
+
+				if (!response.ok) {
+					throw new Error(await response.text());
+				}
+
+				await invalidate('homelab:status');
+				await loadPaletteCommands();
+				await goto(`/homelab?inspect=${encodeURIComponent(`docker:${command.host}/${command.name}`)}`);
+				closePalette();
+			}
+		} catch (error) {
+			paletteError = error instanceof Error ? error.message : 'Command failed.';
+		} finally {
+			runningCommand = null;
+		}
+	}
+
+	function commandTone(command: PaletteCommand) {
+		if (command.danger) {
+			return 'text-[var(--theme-danger)]';
+		}
+
+		if (command.kind.startsWith('service')) {
+			return 'text-[var(--theme-color12,var(--theme-accent))]';
+		}
+
+		return 'text-[var(--theme-accent)]';
+	}
+
 	onMount(() => {
 		if ('serviceWorker' in navigator) {
 			void navigator.serviceWorker.register('/service-worker.js').catch(() => {
@@ -116,6 +324,7 @@
 		}
 
 		const raw = localStorage.getItem(LOCAL_THEME_KEY);
+		localHelperDraft = localHelperUrl();
 
 		if (!raw) {
 			return;
@@ -183,6 +392,8 @@
 		};
 	});
 </script>
+
+<svelte:window onkeydown={onWindowKeydown} />
 
 <svelte:head>
 	<link rel="icon" type="image/svg+xml" href="/icons/dash.svg" />
@@ -254,6 +465,16 @@
 			<div class="relative">
 				<button
 					type="button"
+					onclick={openPalette}
+					class="mr-2 inline-flex border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-2.5 py-1.5 text-xs text-[color-mix(in_srgb,var(--theme-fg)_62%,transparent)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-fg)]"
+					aria-label="Open command palette"
+				>
+					<span aria-hidden="true" class="sm:hidden">⌕</span>
+					<span class="hidden sm:inline">Search</span>
+					<kbd class="ml-2 hidden border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-1 text-[10px] sm:inline">⌘K</kbd>
+				</button>
+				<button
+					type="button"
 					onclick={() => (pickerOpen = !pickerOpen)}
 					class="flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-1.5 text-xs transition hover:border-[var(--theme-accent)]"
 					aria-haspopup="menu"
@@ -303,11 +524,21 @@
 							<span class="flex flex-col">
 								<span>This device's Omarchy</span>
 								<span class="text-[10px] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
-									Requires local helper
+									Uses helper URL below
 								</span>
 							</span>
 							{#if localOmarchy}<span aria-hidden="true">✓</span>{/if}
 						</button>
+						<label class="block px-2 pb-1">
+							<span class="sr-only">Omarchy helper URL</span>
+							<input
+								bind:value={localHelperDraft}
+								type="url"
+								inputmode="url"
+								placeholder="http://127.0.0.1:43741"
+								class="w-full border border-[color-mix(in_srgb,var(--theme-fg)_12%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_48%,transparent)] px-2 py-1.5 text-[11px] text-[var(--theme-fg)] outline-none transition placeholder:text-[color-mix(in_srgb,var(--theme-fg)_34%,transparent)] focus:border-[var(--theme-accent)]"
+							/>
+						</label>
 						{#if localError}
 							<p class="px-2 py-1 text-[10px] leading-4 text-[var(--theme-danger)]">
 								{localError}
@@ -340,6 +571,96 @@
 	</nav>
 
 	{@render children()}
+
+	{#if paletteOpen}
+		<div
+			class="fixed inset-0 z-50 bg-[color-mix(in_srgb,var(--theme-bg)_58%,transparent)] backdrop-blur-sm"
+			role="presentation"
+			onclick={closePalette}
+			transition:fade={{ duration: 100 }}
+		></div>
+
+		<div
+			class="fixed left-1/2 top-20 z-50 w-[min(calc(100vw-1.5rem),42rem)] -translate-x-1/2 border border-[color-mix(in_srgb,var(--theme-accent)_36%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,var(--theme-bg))] p-1.5 shadow-[0_24px_80px_-26px_color-mix(in_srgb,var(--theme-bg)_92%,transparent)] backdrop-blur"
+			role="dialog"
+			aria-label="Command palette"
+			transition:fly={{ y: -8, duration: 120 }}
+		>
+			<label class="block border-b border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)]">
+				<span class="sr-only">Search commands</span>
+				<input
+					bind:this={paletteInput}
+					bind:value={paletteQuery}
+					type="search"
+					placeholder="Search bookmarks, pages, services…"
+					oninput={() => {
+						paletteIndex = 0;
+						confirmingCommand = null;
+					}}
+					onkeydown={onPaletteKeydown}
+					class="w-full bg-transparent px-3 py-3 text-sm outline-none placeholder:text-[color-mix(in_srgb,var(--theme-fg)_38%,transparent)] [&::-webkit-search-cancel-button]:hidden"
+				/>
+			</label>
+
+			<div class="max-h-[min(28rem,calc(100dvh-9rem))] overflow-auto py-1">
+				{#if paletteLoading}
+					<p class="px-3 py-6 text-center text-xs text-[color-mix(in_srgb,var(--theme-fg)_52%,transparent)]">
+						Loading commands…
+					</p>
+				{:else if paletteError}
+					<p class="px-3 py-3 text-xs text-[var(--theme-danger)]">{paletteError}</p>
+				{:else if paletteResults.length === 0}
+					<p class="px-3 py-6 text-center text-xs text-[color-mix(in_srgb,var(--theme-fg)_52%,transparent)]">
+						No commands match.
+					</p>
+				{:else}
+					{#each paletteResults as command, index (command.id)}
+						<button
+							type="button"
+							onclick={() => runCommand(command)}
+							onmouseenter={() => (paletteIndex = index)}
+							class={`flex w-full items-center gap-3 px-3 py-2 text-left transition ${
+								index === paletteIndex
+									? 'bg-[color-mix(in_srgb,var(--theme-fg)_9%,transparent)]'
+									: 'hover:bg-[color-mix(in_srgb,var(--theme-fg)_6%,transparent)]'
+							}`}
+						>
+							<span class={`grid h-7 w-7 shrink-0 place-items-center border border-[color-mix(in_srgb,currentColor_32%,transparent)] text-xs ${commandTone(command)}`}>
+								{command.kind === 'navigate'
+									? '↗'
+									: command.kind === 'bookmark'
+										? '★'
+										: command.kind === 'docker-control'
+											? command.action === 'start'
+												? '▶'
+												: command.action === 'stop'
+													? '■'
+													: '⟳'
+											: command.kind === 'service-logs'
+												? '≡'
+												: '›'}
+							</span>
+							<span class="min-w-0 flex-1">
+								<span class="block truncate text-sm font-medium">
+									{confirmingCommand === command.id ? `${command.title} — press Enter again` : command.title}
+								</span>
+								<span class="block truncate text-xs text-[color-mix(in_srgb,var(--theme-fg)_48%,transparent)]">
+									{command.subtitle}
+								</span>
+							</span>
+							{#if runningCommand === command.id}
+								<span class="shrink-0 animate-spin text-xs text-[var(--theme-warning)]">⟳</span>
+							{:else if command.danger}
+								<span class="shrink-0 text-[10px] uppercase tracking-wide text-[var(--theme-danger)]">
+									Confirm
+								</span>
+							{/if}
+						</button>
+					{/each}
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<nav
 		aria-label="Primary"

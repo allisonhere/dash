@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
+	import { page } from '$app/state';
 	import { summarizeDockerHost } from '$lib/docker-summary.js';
 	import {
 		containerActions,
@@ -128,6 +129,35 @@
 
 		if (!exists) {
 			expandedServiceKey = null;
+		}
+	});
+
+	$effect(() => {
+		const inspectKey = page.url.searchParams.get('inspect');
+
+		if (!inspectKey) {
+			return;
+		}
+
+		const host = dockerHosts.find((candidate) =>
+			candidate.containers.some((container) => `docker:${candidate.name}/${container.name}` === inspectKey)
+		);
+		const container = host?.containers.find(
+			(candidate) => `docker:${host.name}/${candidate.name}` === inspectKey
+		);
+
+		if (!host || !container) {
+			return;
+		}
+
+		expandedServiceKey = inspectKey;
+
+		if (page.url.searchParams.get('logs') === '1' && !logOpen[inspectKey]) {
+			logOpen[inspectKey] = true;
+
+			if (logs[inspectKey] === undefined && !logLoading[inspectKey]) {
+				void refreshLogs(inspectKey, host.name, container.name);
+			}
 		}
 	});
 

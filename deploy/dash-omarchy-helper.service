@@ -5,6 +5,7 @@ After=graphical-session.target
 [Service]
 Type=simple
 WorkingDirectory=%h/Projects/dash
+EnvironmentFile=-%h/.config/dash/omarchy-helper.env
 ExecStart=/usr/bin/env npm run omarchy:helper
 Restart=on-failure
 RestartSec=3

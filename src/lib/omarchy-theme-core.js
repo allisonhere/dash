@@ -9,9 +9,33 @@ const COLOR_ALIAS = {
 	border_color: 'border',
 	cursor: 'cursor',
 	foreground: 'foreground',
+	fg: 'foreground',
 	background: 'background',
+	bg: 'background',
+	muted: 'muted',
+	selection: 'selectionBackground',
 	selection_foreground: 'selectionForeground',
-	selection_background: 'selectionBackground'
+	selection_background: 'selectionBackground',
+	dark_background: 'darkBackground',
+	dark_bg: 'darkBackground',
+	darker_background: 'darkerBackground',
+	darker_bg: 'darkerBackground',
+	lighter_background: 'lighterBackground',
+	lighter_bg: 'lighterBackground',
+	dark_foreground: 'darkForeground',
+	dark_fg: 'darkForeground',
+	light_foreground: 'lightForeground',
+	light_fg: 'lightForeground',
+	bright_foreground: 'brightForeground',
+	bright_fg: 'brightForeground',
+	red: 'red',
+	green: 'green',
+	yellow: 'yellow',
+	blue: 'blue',
+	magenta: 'magenta',
+	cyan: 'cyan',
+	white: 'white',
+	black: 'black'
 };
 
 /** @type {Record<string, string>} */
@@ -66,8 +90,13 @@ export function parseOmarchyThemeToml(toml) {
 
 		const key = match[1];
 		const value = normalizeTomlValue(match[2]);
+		const normalizedKey = normalizeTomlKey(key);
 		const colorKey = normalizeColorKey(key);
 		const settingKey = normalizeSettingKey(key);
+
+		if (normalizedKey === 'mode' && (value === 'light' || value === 'dark')) {
+			settings.mode = value;
+		}
 
 		if (colorKey && HEX_COLOR.test(value)) {
 			colors[colorKey] = value;
@@ -219,16 +248,17 @@ export function composeTheme(input) {
 	/** @type {OmarchySettings} */
 	const settings = { ...(input.settings ?? {}) };
 
+	normalizeSemanticColors(colors);
 	colors.accent ??= colors.color4 ?? colors.foreground;
 	colors.border ??= colors.accent;
 	colors.selectionBackground ??= colors.accent;
-	colors.selectionForeground ??= colors.background;
+	colors.selectionForeground ??= colors.brightForeground ?? colors.foreground;
 
 	const cssVariables = themeToCssVariables({ colors, settings });
 
 	return {
 		name: input.name,
-		mode: input.mode ?? 'dark',
+		mode: input.mode ?? themeMode(settings),
 		source: input.source ?? null,
 		background: input.background ?? null,
 		backgroundVersion: input.backgroundVersion ?? null,
@@ -257,12 +287,13 @@ export function composeThemeFromLocalPayload(payload) {
 	const walker = readWalkerColors(payload.files.walkerCss ?? '');
 	const hyprlandBorder = readHyprlandBorder(payload.files.hyprlandConf ?? '');
 
+	normalizeSemanticColors(colors);
 	colors.accent ??= walker.accent ?? hyprlandBorder ?? colors.color4 ?? colors.foreground;
 	colors.border ??= hyprlandBorder ?? walker.border ?? colors.accent;
 
 	return composeTheme({
 		name: payload.name,
-		mode: payload.mode ?? 'dark',
+		mode: payload.mode ?? themeMode(settings),
 		colors,
 		settings,
 		source: 'local helper'
@@ -310,6 +341,33 @@ function normalizeColorKey(key) {
 	}
 
 	return COLOR_ALIAS[normalized] ?? null;
+}
+
+/**
+ * @param {OmarchyColors} colors
+ */
+function normalizeSemanticColors(colors) {
+	colors.color0 ??= colors.black ?? colors.darkerBackground ?? colors.background;
+	colors.color1 ??= colors.red;
+	colors.color2 ??= colors.green;
+	colors.color3 ??= colors.yellow;
+	colors.color4 ??= colors.blue ?? colors.accent;
+	colors.color5 ??= colors.magenta;
+	colors.color6 ??= colors.cyan;
+	colors.color7 ??= colors.white ?? colors.foreground;
+	colors.color8 ??= colors.muted ?? colors.darkForeground;
+	colors.accent ??= colors.blue;
+	colors.muted ??= colors.color8 ?? colors.darkForeground;
+	colors.selectionBackground ??= colors.selection;
+	colors.selectionForeground ??= colors.brightForeground ?? colors.foreground;
+}
+
+/**
+ * @param {OmarchySettings} settings
+ * @returns {ThemeMode}
+ */
+function themeMode(settings) {
+	return settings.mode === 'light' || settings.mode === 'dark' ? settings.mode : 'dark';
 }
 
 /**

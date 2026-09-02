@@ -85,8 +85,7 @@ export function serviceOpenUrl(host, container, browserHost = '') {
 	const labeledUrl =
 		labels['dash.url'] ||
 		labels['homepage.href'] ||
-		labels['homepage.url'] ||
-		labels['org.opencontainers.image.url'];
+		labels['homepage.url'];
 
 	if (labeledUrl && /^https?:\/\//i.test(labeledUrl)) {
 		return labeledUrl;

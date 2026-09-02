@@ -41,12 +41,28 @@ export type OmarchyColorKey =
 	| 'border'
 	| 'cursor'
 	| 'foreground'
+	| 'darkForeground'
+	| 'lightForeground'
+	| 'brightForeground'
 	| 'background'
+	| 'darkBackground'
+	| 'darkerBackground'
+	| 'lighterBackground'
+	| 'muted'
 	| 'selectionForeground'
 	| 'selectionBackground'
+	| 'selection'
+	| 'red'
+	| 'green'
+	| 'yellow'
+	| 'blue'
+	| 'magenta'
+	| 'cyan'
+	| 'white'
+	| 'black'
 	| `color${number}`;
 
-export type OmarchySettingKey = 'blur' | 'opacity' | 'gap' | 'gapInner' | 'gapOuter';
+export type OmarchySettingKey = 'blur' | 'opacity' | 'gap' | 'gapInner' | 'gapOuter' | 'mode';
 export type OmarchyColors = Partial<Record<OmarchyColorKey, string>>;
 export type OmarchySettings = Partial<Record<OmarchySettingKey, string>>;
 
@@ -78,9 +94,33 @@ const COLOR_ALIAS: Record<string, OmarchyColorKey> = {
 	border_color: 'border',
 	cursor: 'cursor',
 	foreground: 'foreground',
+	fg: 'foreground',
 	background: 'background',
+	bg: 'background',
+	muted: 'muted',
+	selection: 'selectionBackground',
 	selection_foreground: 'selectionForeground',
-	selection_background: 'selectionBackground'
+	selection_background: 'selectionBackground',
+	dark_background: 'darkBackground',
+	dark_bg: 'darkBackground',
+	darker_background: 'darkerBackground',
+	darker_bg: 'darkerBackground',
+	lighter_background: 'lighterBackground',
+	lighter_bg: 'lighterBackground',
+	dark_foreground: 'darkForeground',
+	dark_fg: 'darkForeground',
+	light_foreground: 'lightForeground',
+	light_fg: 'lightForeground',
+	bright_foreground: 'brightForeground',
+	bright_fg: 'brightForeground',
+	red: 'red',
+	green: 'green',
+	yellow: 'yellow',
+	blue: 'blue',
+	magenta: 'magenta',
+	cyan: 'cyan',
+	white: 'white',
+	black: 'black'
 };
 
 const SETTING_ALIAS: Record<string, OmarchySettingKey> = {
@@ -126,17 +166,18 @@ export function loadOmarchyTheme(nameOverride?: string): OmarchyTheme {
 	const walker = readWalkerColors(themeDir);
 	const hyprlandBorder = readHyprlandBorder(themeDir);
 
+	normalizeSemanticColors(colors);
 	colors.accent ??= walker.accent ?? hyprlandBorder ?? colors.color4 ?? colors.foreground;
 	colors.border ??= hyprlandBorder ?? walker.border ?? colors.accent;
 	colors.selectionBackground ??= colors.accent;
-	colors.selectionForeground ??= colors.background;
+	colors.selectionForeground ??= colors.brightForeground ?? colors.foreground;
 
 	const background = findBackground(themeDir, isCurrentTheme);
 	const cssVariables = themeToCssVariables({ colors, settings });
 
 	return {
 		name,
-		mode: themeDir && existsSync(join(themeDir, 'light.mode')) ? 'light' : 'dark',
+		mode: themeMode(themeDir, settings),
 		source: colorsToml?.path ?? alacrittyToml?.path ?? null,
 		background,
 		backgroundVersion: background ? safeMtime(background) : null,
@@ -160,16 +201,17 @@ export function composeTheme(input: {
 	const colors: OmarchyColors = { ...input.colors };
 	const settings: OmarchySettings = { ...(input.settings ?? {}) };
 
+	normalizeSemanticColors(colors);
 	colors.accent ??= colors.color4 ?? colors.foreground;
 	colors.border ??= colors.accent;
 	colors.selectionBackground ??= colors.accent;
-	colors.selectionForeground ??= colors.background;
+	colors.selectionForeground ??= colors.brightForeground ?? colors.foreground;
 
 	const cssVariables = themeToCssVariables({ colors, settings });
 
 	return {
 		name: input.name,
-		mode: input.mode ?? 'dark',
+		mode: input.mode ?? (settings.mode === 'light' ? 'light' : 'dark'),
 		source: null,
 		background: null,
 		backgroundVersion: null,
@@ -224,8 +266,13 @@ export function parseOmarchyThemeToml(toml: string): ParsedThemeToml {
 
 		const key = match[1];
 		const value = normalizeTomlValue(match[2]);
+		const normalizedKey = normalizeTomlKey(key);
 		const colorKey = normalizeColorKey(key);
 		const settingKey = normalizeSettingKey(key);
+
+		if (normalizedKey === 'mode' && (value === 'light' || value === 'dark')) {
+			settings.mode = value;
+		}
 
 		if (colorKey && HEX_COLOR.test(value)) {
 			colors[colorKey] = value;
@@ -415,6 +462,30 @@ function findBackground(themeDir: string | null, isCurrentTheme: boolean): strin
 		.sort()[0];
 
 	return first ? join(backgroundsDir, first) : null;
+}
+
+function themeMode(themeDir: string | null, settings: OmarchySettings): 'light' | 'dark' {
+	if (settings.mode === 'light' || settings.mode === 'dark') {
+		return settings.mode;
+	}
+
+	return themeDir && existsSync(join(themeDir, 'light.mode')) ? 'light' : 'dark';
+}
+
+function normalizeSemanticColors(colors: OmarchyColors) {
+	colors.color0 ??= colors.black ?? colors.darkerBackground ?? colors.background;
+	colors.color1 ??= colors.red;
+	colors.color2 ??= colors.green;
+	colors.color3 ??= colors.yellow;
+	colors.color4 ??= colors.blue ?? colors.accent;
+	colors.color5 ??= colors.magenta;
+	colors.color6 ??= colors.cyan;
+	colors.color7 ??= colors.white ?? colors.foreground;
+	colors.color8 ??= colors.muted ?? colors.darkForeground;
+	colors.accent ??= colors.blue;
+	colors.muted ??= colors.color8 ?? colors.darkForeground;
+	colors.selectionBackground ??= colors.selection;
+	colors.selectionForeground ??= colors.brightForeground ?? colors.foreground;
 }
 
 function safeMtime(path: string): number | null {

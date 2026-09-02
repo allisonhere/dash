@@ -158,10 +158,22 @@ The helper listens only on `127.0.0.1:43741`. Override defaults if needed:
 OMARCHY_HELPER_PORT=43741 OMARCHY_DIR=~/.config/omarchy npm run omarchy:helper
 ```
 
-If you change the port, point this browser at it once from the devtools console:
+If the Omarchy desktop is a different machine on the LAN, bind the helper to
+the LAN interface:
 
-```js
-localStorage.setItem('dash:local-omarchy-helper-url', 'http://127.0.0.1:43741')
+```bash
+OMARCHY_HELPER_HOST=0.0.0.0 OMARCHY_HELPER_PORT=43741 npm run omarchy:helper
+```
+
+Then open Dash's theme menu, enter `http://<omarchy-desktop-ip>:43741` in the
+helper URL field, and choose **This device's Omarchy**.
+
+For the user service, persist the same setting with:
+
+```bash
+mkdir -p ~/.config/dash
+printf 'OMARCHY_HELPER_HOST=0.0.0.0\nOMARCHY_HELPER_PORT=43741\n' > ~/.config/dash/omarchy-helper.env
+systemctl --user restart dash-omarchy-helper.service
 ```
 
 ## Notes

@@ -58,4 +58,17 @@ describe('service inspector helpers', () => {
 			'http://192.168.86.74:8096/'
 		);
 	});
+
+	it('does not treat Docker image metadata as a service open URL', () => {
+		assert.equal(
+			serviceOpenUrl(
+				{ name: 'services', target: 'allie@192.168.86.74' },
+				{
+					labels: { 'org.opencontainers.image.url': 'https://github.com/example/image' },
+					ports: []
+				}
+			),
+			''
+		);
+	});
 });
