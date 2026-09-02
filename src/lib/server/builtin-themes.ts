@@ -1,14 +1,14 @@
-import { composeTheme, type OmarchyColors, type OmarchyTheme } from './omarchy-theme';
+import { composeTheme, type DashTheme, type ThemeColors } from './theme-core';
 
 export type BuiltinTheme = {
 	slug: string;
 	label: string;
 	mode: 'light' | 'dark';
-	colors: OmarchyColors;
+	colors: ThemeColors;
 };
 
-// Curated presets in the same palette shape as omarchy themes. Full 16-color
-// palettes so the per-category accent cycling on bookmarks/news looks varied.
+// Curated presets with full 16-color palettes so the per-category accent
+// cycling on bookmarks/news looks varied.
 // themeToCssVariables maps color0→panel, color8→muted, color1/2/3/6→danger/
 // success/warning/info, so keep those slots semantically correct.
 const THEMES: BuiltinTheme[] = [
@@ -190,7 +190,7 @@ export function isBuiltinTheme(slug: string): boolean {
 	return BY_SLUG.has(slug);
 }
 
-export function loadBuiltinTheme(slug: string): OmarchyTheme {
+export function loadBuiltinTheme(slug: string): DashTheme {
 	const theme = BY_SLUG.get(slug) ?? BY_SLUG.get(DEFAULT_BUILTIN)!;
 	return composeTheme({ name: theme.label, mode: theme.mode, colors: theme.colors });
 }

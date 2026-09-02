@@ -16,7 +16,7 @@ export const BACKUP_VERSION = 1;
 
 /** @typedef {{ id: string; title: string; url: string }} BackupFeed */
 /** @typedef {{ id: string; name: string; color: string }} BackupGroup */
-/** @typedef {{ mode: 'builtin' | 'omarchy'; name: string }} BackupTheme */
+/** @typedef {{ mode: 'builtin'; name: string }} BackupTheme */
 
 /**
  * @typedef {{
@@ -170,16 +170,13 @@ function group(value) {
 function backupTheme(value) {
 	const item = record(value, 'The theme selection in the backup is invalid.');
 
-	if (item.mode !== 'builtin' && item.mode !== 'omarchy') {
-		throw new Error('Theme mode must be builtin or omarchy.');
+	if (item.mode !== 'builtin') {
+		throw new Error('Theme mode must be builtin.');
 	}
 
 	return {
 		mode: item.mode,
-		name:
-			item.mode === 'builtin'
-				? requiredString(item.name, 'Theme name')
-				: optionalString(item.name, 'Theme name')
+		name: requiredString(item.name, 'Theme name')
 	};
 }
 

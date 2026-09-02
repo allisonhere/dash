@@ -5,8 +5,8 @@ import { dashboardConfigPath } from './dashboard-config';
 
 // A named JSON collection (e.g. "bookmarks", "feeds") persisted either to a
 // local file (default) or a shared remote HTTP store when DASH_STORE_URL is set.
-// The remote backend lets several dash instances share one source of truth
-// while each still reads its omarchy theme and homelab config locally.
+// The remote backend lets several dash instances share one source of truth while
+// keeping per-instance theme and homelab config local.
 
 const STORE_TIMEOUT_MS = 8_000;
 const ALLOWED = new Set(['bookmarks', 'feeds', 'groups']);

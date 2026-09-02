@@ -1,7 +1,6 @@
 // A group's color is stored either as a theme variable name ("--theme-color3"),
 // a literal hex ("#b48ead"), or "" meaning "pick one from the palette for me".
-// Theme vars are preferred because they re-tint when the omarchy theme changes;
-// a hex stays put.
+// Theme vars are preferred because they re-tint when the selected theme changes.
 
 export const PALETTE = [
 	'--theme-accent',

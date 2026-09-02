@@ -10,7 +10,7 @@ mounted at `/config`.
   to eight pinned shortcuts
 - RSS and Atom feed reader with per-feed error reporting
 - Live Proxmox, Docker, and NUT UPS status with guarded power controls
-- Built-in themes plus local or server-side Omarchy theme matching
+- Built-in themes
 - Responsive desktop and mobile navigation with safe-area spacing
 - Installable PWA metadata and app icons
 - Versioned backup and restore for bookmarks, feeds, groups, and theme selection
@@ -20,7 +20,7 @@ mounted at `/config`.
 ```sh
 git clone git@github.com:allisonhere/dash.git
 cd dash
-mkdir -p data omarchy
+mkdir -p data
 docker compose up -d --build
 ```
 
@@ -52,8 +52,8 @@ rm -r "$ghcr_config"
 docker compose up -d --no-build dash
 ```
 
-See [deploy/README.md](deploy/README.md) for the Jarvis deployment, Omarchy
-sync, NUT, Docker socket, and Proxmox configuration.
+See [deploy/README.md](deploy/README.md) for the Jarvis deployment, NUT,
+Docker socket, and Proxmox configuration.
 
 ## Local development
 
@@ -135,23 +135,6 @@ excludes `homelab.json` because it may contain access tokens. Back up the whole
 Dash can use a shared HTTP data store instead of local collection files. Set
 `DASH_STORE_URL` and, when required, `DASH_STORE_TOKEN`. Theme and homelab
 configuration remain local to each Dash instance.
-
-## Omarchy themes
-
-Dash supports two Omarchy paths:
-
-- `Match omarchy` reads the Omarchy directory mounted on the server.
-- `This device's Omarchy` reads the theme from a helper on the desktop viewing
-  Dash.
-
-Install the desktop helper with:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/allisonhere/dash/master/deploy/install-omarchy-helper.sh | bash
-```
-
-Then choose `This device's Omarchy` from the theme menu. The helper listens on
-`127.0.0.1:43741` and watches the current Omarchy theme for changes.
 
 ## PWA installation
 

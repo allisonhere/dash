@@ -47,11 +47,11 @@ describe('Dash backup format', () => {
 		assert.throws(() => parseBackupDocument(document), /duplicate feeds/);
 	});
 
-	it('supports the per-device Omarchy theme with an empty name', () => {
+	it('rejects removed theme modes', () => {
 		const document = createBackupDocument({
 			...sample,
-			theme: { mode: 'omarchy', name: '' }
+			theme: { mode: 'external', name: '' }
 		});
-		assert.equal(parseBackupDocument(document).theme.name, '');
+		assert.throws(() => parseBackupDocument(document), /Theme mode must be builtin/);
 	});
 });

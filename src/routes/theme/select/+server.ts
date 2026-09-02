@@ -1,6 +1,5 @@
 import { json, error } from '@sveltejs/kit';
 import { isBuiltinTheme } from '$lib/server/builtin-themes';
-import { omarchyAvailable } from '$lib/server/omarchy-theme';
 import { writeThemeSelection, type ThemeSelection } from '$lib/server/theme-selection';
 
 export const POST = async ({ request }: { request: Request }) => {
@@ -13,14 +12,10 @@ export const POST = async ({ request }: { request: Request }) => {
 	}
 
 	const raw = (body ?? {}) as Record<string, unknown>;
-	const mode = raw.mode === 'omarchy' ? 'omarchy' : 'builtin';
+	const mode = 'builtin';
 	const name = typeof raw.name === 'string' ? raw.name : '';
 
-	if (mode === 'omarchy') {
-		if (!omarchyAvailable()) {
-			error(400, 'No omarchy install is available on this instance.');
-		}
-	} else if (!isBuiltinTheme(name)) {
+	if (!isBuiltinTheme(name)) {
 		error(400, 'Unknown theme.');
 	}
 

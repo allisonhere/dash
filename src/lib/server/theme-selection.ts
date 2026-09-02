@@ -1,16 +1,15 @@
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { dashboardConfigPath } from './dashboard-config';
-import { loadOmarchyTheme, omarchyAvailable, type OmarchyTheme } from './omarchy-theme';
 import { DEFAULT_BUILTIN, isBuiltinTheme, listBuiltinThemes, loadBuiltinTheme } from './builtin-themes';
+import type { DashTheme } from './theme-core';
 
-export type ThemeMode = 'builtin' | 'omarchy';
+export type ThemeMode = 'builtin';
 export type ThemeSelection = { mode: ThemeMode; name: string };
 
 export type ResolvedTheme = {
-	theme: OmarchyTheme;
+	theme: DashTheme;
 	selection: ThemeSelection;
-	omarchyAvailable: boolean;
 	builtins: Array<{ slug: string; label: string }>;
 };
 
@@ -33,7 +32,7 @@ export function readThemeSelection(): ThemeSelection {
 	}
 
 	const raw = parsed as Record<string, unknown>;
-	const mode = raw.mode === 'omarchy' ? 'omarchy' : 'builtin';
+	const mode = 'builtin';
 	const name = typeof raw.name === 'string' ? raw.name : DEFAULT_BUILTIN;
 	return { mode, name };
 }
@@ -49,27 +48,11 @@ export function writeThemeSelection(selection: ThemeSelection) {
 export function resolveTheme(): ResolvedTheme {
 	const selection = readThemeSelection();
 	const builtins = listBuiltinThemes();
-
-	// "Match omarchy" reads the local omarchy install directly (OMARCHY_DIR, or
-	// ~/.config/omarchy). In the container this is a read-only bind mount. When
-	// no omarchy dir is present the option is hidden and we fall back to a builtin.
-	const hasOmarchy = omarchyAvailable();
-
-	if (selection.mode === 'omarchy' && hasOmarchy) {
-		return {
-			theme: loadOmarchyTheme(selection.name || undefined),
-			selection,
-			omarchyAvailable: hasOmarchy,
-			builtins
-		};
-	}
-
 	const slug = isBuiltinTheme(selection.name) ? selection.name : DEFAULT_BUILTIN;
 
 	return {
 		theme: loadBuiltinTheme(slug),
 		selection: { mode: 'builtin', name: slug },
-		omarchyAvailable: hasOmarchy,
 		builtins
 	};
 }
