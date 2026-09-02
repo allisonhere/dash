@@ -1,14 +1,25 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { CONTAINER_NAME_RE } from '$lib/service-inspector.js';
 import type { DockerHostConfig } from './homelab-config';
 
 const run = promisify(execFile);
 
+export { CONTAINER_NAME_RE } from '$lib/service-inspector.js';
+
 export type DockerContainer = {
 	name: string;
+	id: string;
 	image: string;
 	state: string;
 	status: string;
+	created: string;
+	ports: Array<{ privatePort: string; hostIp: string; hostPort: string }>;
+	networks: Array<{ name: string; ip: string }>;
+	mounts: Array<{ type: string; source: string; destination: string; mode: string }>;
+	labels: Record<string, string>;
+	composeProject: string;
+	restartCount: number;
 	cpu: number;
 	memUsed: number;
 	memLimit: number;
@@ -20,10 +31,6 @@ export type DockerContainer = {
 export type DockerAction = 'start' | 'stop' | 'restart';
 
 export const DOCKER_ACTIONS: readonly DockerAction[] = ['start', 'stop', 'restart'];
-
-// Docker's own container-naming rule. Anything failing this is rejected before
-// it can reach a shell.
-export const CONTAINER_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 export type DockerHostStatus = {
 	name: string;
@@ -63,6 +70,9 @@ function isLocalTarget(config: DockerHostConfig): boolean {
 const REMOTE_SCRIPT = [
 	"echo '#PS'",
 	"docker ps -a --format '{{.Names}}\\t{{.Image}}\\t{{.State}}\\t{{.Status}}'",
+	"echo '#INSPECT'",
+	"ids=$(docker ps -aq)",
+	"if [ -n \"$ids\" ]; then docker inspect --format '{{.Name}}\t{{.Id}}\t{{.RestartCount}}\t{{.Created}}\t{{range $p,$conf:=.NetworkSettings.Ports}}{{$p}}=>{{if $conf}}{{range $i,$b:=$conf}}{{$b.HostIp}}:{{$b.HostPort}},{{end}}{{end}};{{end}}\t{{range $n,$v:=.NetworkSettings.Networks}}{{$n}}={{$v.IPAddress}};{{end}}\t{{range .Mounts}}{{.Type}}:{{.Source}}->{{.Destination}}:{{.Mode}};{{end}}\t{{range $k,$v:=.Config.Labels}}{{$k}}={{$v}};{{end}}' $ids; fi",
 	"echo '#STATS'",
 	"docker stats --no-stream --format '{{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}'",
 	"echo '#HOST'",
@@ -139,9 +149,51 @@ export async function controlDockerContainer(
 	}
 }
 
+export async function dockerContainerLogs(
+	config: DockerHostConfig,
+	containerName: string,
+	lines = 50
+): Promise<{ ok: true; logs: string } | { ok: false; error: string }> {
+	if (!CONTAINER_NAME_RE.test(containerName)) {
+		return { ok: false, error: 'Invalid container name.' };
+	}
+
+	const tail = Math.min(500, Math.max(1, Math.round(lines)));
+
+	try {
+		if (isLocalTarget(config)) {
+			const { stdout, stderr } = await run('docker', ['logs', '--tail', String(tail), containerName], {
+				timeout: SSH_TIMEOUT_MS,
+				maxBuffer: 512 * 1024
+			});
+			return { ok: true, logs: stdout + stderr };
+		}
+
+		const { stdout, stderr } = await run(
+			'ssh',
+			[...SSH_OPTIONS, config.ssh, `docker logs --tail ${tail} ${containerName} 2>&1`],
+			{
+				timeout: SSH_TIMEOUT_MS,
+				maxBuffer: 512 * 1024
+			}
+		);
+
+		return { ok: true, logs: stdout + stderr };
+	} catch (error) {
+		const stderr = ((error as { stderr?: string })?.stderr ?? '').trim();
+
+		if (/no such container/i.test(stderr)) {
+			return { ok: false, error: 'Container not found — it may have been removed.' };
+		}
+
+		return { ok: false, error: sshError(error) };
+	}
+}
+
 function parseOutput(stdout: string, base: DockerHostStatus, isLocal: boolean): DockerHostStatus {
 	const sections = splitSections(stdout);
 	const stats = parseStats(sections.stats);
+	const inspected = parseInspect(sections.inspect);
 	const selfName = process.env.DASH_SELF_CONTAINER ?? 'dash';
 
 	const containers = sections.ps
@@ -153,12 +205,22 @@ function parseOutput(stdout: string, base: DockerHostStatus, isLocal: boolean): 
 			}
 
 			const stat = stats.get(name);
+			const inspect = inspected.get(name);
+			const labels = inspect?.labels ?? {};
 
 			return {
 				name,
+				id: inspect?.id ?? '',
 				image: image ?? '',
 				state: state ?? 'unknown',
 				status: status ?? '',
+				created: inspect?.created ?? '',
+				ports: inspect?.ports ?? [],
+				networks: inspect?.networks ?? [],
+				mounts: inspect?.mounts ?? [],
+				labels,
+				composeProject: labels['com.docker.compose.project'] ?? '',
+				restartCount: inspect?.restartCount ?? 0,
 				cpu: stat?.cpu ?? 0,
 				memUsed: stat?.memUsed ?? 0,
 				memLimit: stat?.memLimit ?? 0,
@@ -178,14 +240,21 @@ function parseOutput(stdout: string, base: DockerHostStatus, isLocal: boolean): 
 
 function splitSections(stdout: string) {
 	const lines = stdout.split('\n');
-	const buckets: Record<'ps' | 'stats' | 'host', string[]> = { ps: [], stats: [], host: [] };
-	let current: 'ps' | 'stats' | 'host' | null = null;
+	const buckets: Record<'ps' | 'inspect' | 'stats' | 'host', string[]> = {
+		ps: [],
+		inspect: [],
+		stats: [],
+		host: []
+	};
+	let current: 'ps' | 'inspect' | 'stats' | 'host' | null = null;
 
 	for (const rawLine of lines) {
 		const line = rawLine.replace(/\r$/, '');
 
 		if (line === '#PS') {
 			current = 'ps';
+		} else if (line === '#INSPECT') {
+			current = 'inspect';
 		} else if (line === '#STATS') {
 			current = 'stats';
 		} else if (line === '#HOST') {
@@ -196,6 +265,114 @@ function splitSections(stdout: string) {
 	}
 
 	return buckets;
+}
+
+function parseInspect(lines: string[]) {
+	const inspected = new Map<
+		string,
+		{
+			id: string;
+			restartCount: number;
+			created: string;
+			ports: DockerContainer['ports'];
+			networks: DockerContainer['networks'];
+			mounts: DockerContainer['mounts'];
+			labels: Record<string, string>;
+		}
+	>();
+
+	for (const line of lines) {
+		const [rawName, id, restartCount, created, rawPorts, rawNetworks, rawMounts, rawLabels] =
+			line.split('\t');
+		const name = rawName?.replace(/^\//, '');
+
+		if (!name) {
+			continue;
+		}
+
+		inspected.set(name, {
+			id: id ?? '',
+			restartCount: Number.parseInt(restartCount ?? '0', 10) || 0,
+			created: created ?? '',
+			ports: parsePorts(rawPorts),
+			networks: parseNetworks(rawNetworks),
+			mounts: parseMounts(rawMounts),
+			labels: parseLabels(rawLabels)
+		});
+	}
+
+	return inspected;
+}
+
+function parsePorts(value: string | undefined): DockerContainer['ports'] {
+	return (value ?? '')
+		.split(';')
+		.map((entry) => {
+			const [privatePort, bindings] = entry.split('=>');
+			const binding = (bindings ?? '').split(',').find(Boolean) ?? '';
+			const [hostIp, hostPort] = binding.split(':');
+
+			if (!privatePort) {
+				return null;
+			}
+
+			return { privatePort, hostIp: hostIp ?? '', hostPort: hostPort ?? '' };
+		})
+		.filter((port): port is DockerContainer['ports'][number] => port !== null);
+}
+
+function parseNetworks(value: string | undefined): DockerContainer['networks'] {
+	return (value ?? '')
+		.split(';')
+		.map((entry) => {
+			const [name, ip] = entry.split('=');
+			return name ? { name, ip: ip ?? '' } : null;
+		})
+		.filter((network): network is DockerContainer['networks'][number] => network !== null);
+}
+
+function parseMounts(value: string | undefined): DockerContainer['mounts'] {
+	return (value ?? '')
+		.split(';')
+		.map((entry) => {
+			const match = entry.match(/^([^:]+):(.*)->([^:]+):(.*)$/);
+			return match
+				? { type: match[1], source: match[2], destination: match[3], mode: match[4] }
+				: null;
+		})
+		.filter((mount): mount is DockerContainer['mounts'][number] => mount !== null);
+}
+
+function parseLabels(value: string | undefined): Record<string, string> {
+	const labels: Record<string, string> = {};
+
+	for (const entry of (value ?? '').split(';')) {
+		const index = entry.indexOf('=');
+
+		if (index <= 0) {
+			continue;
+		}
+
+		const name = entry.slice(0, index);
+
+		if (isRelevantLabel(name)) {
+			labels[name] = entry.slice(index + 1);
+		}
+	}
+
+	return labels;
+}
+
+function isRelevantLabel(name: string): boolean {
+	return (
+		name.startsWith('com.docker.compose.') ||
+		name.startsWith('dash.') ||
+		name.startsWith('homepage.') ||
+		name === 'org.opencontainers.image.url' ||
+		name === 'org.opencontainers.image.source' ||
+		name === 'org.opencontainers.image.title' ||
+		name === 'org.opencontainers.image.version'
+	);
 }
 
 function parseStats(lines: string[]): Map<string, { cpu: number; memUsed: number; memLimit: number }> {

@@ -2,18 +2,31 @@
 	import { enhance } from '$app/forms';
 	import { invalidate } from '$app/navigation';
 	import { summarizeDockerHost } from '$lib/docker-summary.js';
-	import { fade, scale } from 'svelte/transition';
+	import {
+		containerActions,
+		nextExpandedService,
+		serviceOpenUrl
+	} from '$lib/service-inspector.js';
+	import { fade, scale, slide } from 'svelte/transition';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
 	let { data }: { data: import('./$types').PageData } = $props();
 
 	let refreshing = $state(false);
 	let openMenu = $state<string | null>(null);
+	let expandedServiceKey = $state<string | null>(null);
+	let browserHost = $state('');
 	let confirming = $state<string | null>(null);
 	let pending = $state<Record<string, { action: UiAction; at: number }>>({});
 	let actionError = $state<Record<string, string>>({});
+	let logOpen = $state<Record<string, boolean>>({});
+	let logLoading = $state<Record<string, boolean>>({});
+	let logError = $state<Record<string, string>>({});
+	let logs = $state<Record<string, string>>({});
 
 	type UiAction = 'start' | 'stop' | 'restart';
+	type DockerHost = import('$lib/server/docker-ssh').DockerHostStatus;
+	type DockerContainer = import('$lib/server/docker-ssh').DockerContainer;
 
 	// Live updates: the server pushes a message whenever container/VM status
 	// changes (see /homelab/events). Closed while the tab is hidden so an idle
@@ -22,6 +35,10 @@
 		let source: EventSource | null = null;
 
 		const connect = () => {
+			if (new URLSearchParams(window.location.search).get('live') === '0') {
+				return;
+			}
+
 			if (source) {
 				return;
 			}
@@ -51,6 +68,10 @@
 			disconnect();
 			document.removeEventListener('visibilitychange', onVisibility);
 		};
+	});
+
+	$effect(() => {
+		browserHost = window.location.hostname;
 	});
 
 	// Re-evaluate pending entries on a slow tick even when no fresh data
@@ -93,6 +114,20 @@
 			if (settled || now - entry.at > 90_000) {
 				delete pending[key];
 			}
+		}
+	});
+
+	$effect(() => {
+		if (!expandedServiceKey) {
+			return;
+		}
+
+		const exists = dockerHosts.some((host) =>
+			host.containers.some((container) => `docker:${host.name}/${container.name}` === expandedServiceKey)
+		);
+
+		if (!exists) {
+			expandedServiceKey = null;
 		}
 	});
 
@@ -157,6 +192,50 @@
 				await update();
 			};
 		};
+	}
+
+	function toggleService(key: string) {
+		expandedServiceKey = nextExpandedService(expandedServiceKey, key);
+		openMenu = null;
+		confirming = null;
+	}
+
+	function onServiceRowKeydown(event: KeyboardEvent, key: string) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			toggleService(key);
+		}
+	}
+
+	async function toggleLogs(key: string, host: string, name: string) {
+		logOpen[key] = !logOpen[key];
+
+		if (logOpen[key] && logs[key] === undefined) {
+			await refreshLogs(key, host, name);
+		}
+	}
+
+	async function refreshLogs(key: string, host: string, name: string) {
+		logLoading[key] = true;
+		delete logError[key];
+
+		try {
+			const response = await fetch(
+				`/homelab/logs?host=${encodeURIComponent(host)}&name=${encodeURIComponent(name)}&lines=50`
+			);
+
+			if (!response.ok) {
+				const message = await response.text();
+				throw new Error(message || `HTTP ${response.status}`);
+			}
+
+			const body = (await response.json()) as { logs?: string };
+			logs[key] = body.logs || 'No recent logs.';
+		} catch (error) {
+			logError[key] = error instanceof Error ? error.message : 'Could not load logs.';
+		} finally {
+			logLoading[key] = false;
+		}
 	}
 
 	const PENDING_LABEL: Record<UiAction, string> = {
@@ -251,6 +330,44 @@
 		return image.replace(/^.*\//, '').replace(/:latest$/, '');
 	}
 
+	function shortId(id: string): string {
+		return id ? id.slice(0, 12) : '—';
+	}
+
+	function statusLabel(container: DockerContainer, inFlight?: { action: UiAction; at: number }): string {
+		if (inFlight) {
+			return PENDING_LABEL[inFlight.action];
+		}
+
+		if (container.state !== 'running') {
+			return container.state || 'stopped';
+		}
+
+		if (/\(healthy\)/i.test(container.status)) {
+			return 'healthy';
+		}
+
+		if (/\(unhealthy\)/i.test(container.status)) {
+			return 'unhealthy';
+		}
+
+		return 'running';
+	}
+
+	function statusDotClass(container: DockerContainer, inFlight?: { action: UiAction; at: number }) {
+		if (inFlight) {
+			return 'animate-pulse bg-[var(--theme-warning)] shadow-[0_0_8px_var(--theme-warning)]';
+		}
+
+		if (container.state !== 'running') {
+			return 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]';
+		}
+
+		return /\(unhealthy\)/i.test(container.status)
+			? 'bg-[var(--theme-danger)] shadow-[0_0_8px_var(--theme-danger)]'
+			: 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]';
+	}
+
 	function dockerGauges(summary: ReturnType<typeof summarizeDockerHost>) {
 		return [
 			{
@@ -300,7 +417,8 @@
 )}
 	<button
 		type="button"
-		onclick={() => {
+		onclick={(event) => {
+			event.stopPropagation();
 			openMenu = openMenu === key ? null : key;
 			confirming = null;
 		}}
@@ -414,6 +532,213 @@
 			{/if}
 		</div>
 	{/if}
+{/snippet}
+
+{#snippet serviceActionButton(
+	key: string,
+	host: DockerHost,
+	container: DockerContainer,
+	action: UiAction,
+	needsConfirm: boolean,
+	isSelf = false
+)}
+	<form
+		method="POST"
+		action="?/container"
+		use:enhance={handleAction(key, action, needsConfirm, isSelf)}
+	>
+		<input type="hidden" name="host" value={host.name} />
+		<input type="hidden" name="name" value={container.name} />
+		<input type="hidden" name="action" value={action} />
+		<button
+			type="submit"
+			disabled={Boolean(pending[key])}
+			class={`border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] px-2.5 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
+				needsConfirm && confirming === `${key}:${action}`
+					? action === 'stop'
+						? 'bg-[color-mix(in_srgb,var(--theme-danger)_22%,transparent)] text-[var(--theme-fg)]'
+						: 'bg-[color-mix(in_srgb,var(--theme-warning)_22%,transparent)] text-[var(--theme-fg)]'
+					: action === 'stop'
+						? 'text-[var(--theme-danger)] hover:bg-[color-mix(in_srgb,var(--theme-danger)_12%,transparent)]'
+						: 'hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--theme-fg)_7%,transparent)]'
+			}`}
+		>
+			{#if needsConfirm && confirming === `${key}:${action}`}
+				{isSelf && action !== 'start' ? `${action === 'stop' ? 'Stops' : 'Restarts'} this dashboard — sure?` : 'Sure?'}
+			{:else}
+				{action === 'start' ? 'Start' : action === 'stop' ? 'Stop' : 'Restart'}
+			{/if}
+		</button>
+	</form>
+{/snippet}
+
+{#snippet serviceLogs(key: string, host: DockerHost, container: DockerContainer)}
+	<div class="border-t border-[color-mix(in_srgb,var(--theme-fg)_9%,transparent)] pt-2">
+		<div class="flex items-center justify-between gap-2">
+			<button
+				type="button"
+				onclick={() => toggleLogs(key, host.name, container.name)}
+				class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_70%,transparent)] transition hover:text-[var(--theme-fg)]"
+				aria-expanded={Boolean(logOpen[key])}
+			>
+				{logOpen[key] ? 'Hide logs' : 'Logs'}
+			</button>
+			{#if logOpen[key]}
+				<button
+					type="button"
+					disabled={Boolean(logLoading[key])}
+					onclick={() => refreshLogs(key, host.name, container.name)}
+					class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] px-2 py-0.5 text-[11px] transition hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)] disabled:opacity-50"
+				>
+					<span class={logLoading[key] ? 'inline-block animate-spin' : 'inline-block'}>⟳</span>
+					Refresh
+				</button>
+			{/if}
+		</div>
+
+		{#if logOpen[key]}
+			<div class="mt-2" transition:slide={{ duration: 120 }}>
+				{#if logError[key]}
+					<p class="text-[11px] text-[var(--theme-danger)]">{logError[key]}</p>
+				{:else}
+					<pre class="max-h-52 overflow-auto whitespace-pre-wrap break-words border border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg)_70%,transparent)] p-2 font-mono text-[11px] leading-4 text-[color-mix(in_srgb,var(--theme-fg)_78%,transparent)]">{logLoading[key] && !logs[key] ? 'Loading logs…' : logs[key]}</pre>
+				{/if}
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet serviceInspector(key: string, host: DockerHost, container: DockerContainer, running: boolean)}
+	{@const inFlight = pending[key]}
+	{@const openUrl = serviceOpenUrl(host, container, browserHost)}
+	<div
+		class="border-x border-b border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_28%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_44%,transparent)] px-3 py-3 backdrop-blur"
+		transition:slide={{ duration: 130 }}
+	>
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<h3 class="truncate text-xs font-semibold uppercase tracking-[0.14em]">{container.name}</h3>
+					<span class={`h-1.5 w-1.5 shrink-0 ${statusDotClass(container, inFlight)}`}></span>
+					<span class="text-[11px] uppercase tracking-wide text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
+						{statusLabel(container, inFlight)}
+					</span>
+				</div>
+				<p class="mt-1 truncate text-xs text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
+					{shortImage(container.image)} · {host.name}
+				</p>
+			</div>
+			<button
+				type="button"
+				aria-label={`Collapse ${container.name}`}
+				onclick={() => (expandedServiceKey = null)}
+				class="grid h-6 w-6 shrink-0 place-items-center border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] text-xs transition hover:border-[var(--theme-accent)]"
+			>
+				×
+			</button>
+		</div>
+
+		<dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+			<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Host</dt>
+			<dd class="min-w-0 truncate font-medium">{host.name}</dd>
+			<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Port</dt>
+			<dd class="min-w-0 truncate font-medium">
+				{container.ports.find((port) => port.hostPort)?.hostPort || container.ports.map((port) => port.privatePort).join(', ') || '—'}
+			</dd>
+			<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Docker</dt>
+			<dd class="inline-flex items-center gap-2 font-medium">
+				<span class={`h-1.5 w-1.5 ${statusDotClass(container, inFlight)}`}></span>
+				{container.state || 'unknown'}
+			</dd>
+			<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">CPU</dt>
+			<dd class="font-medium tabular-nums">{running ? `${container.cpu.toFixed(1)}%` : '—'}</dd>
+			<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">RAM</dt>
+			<dd class="font-medium tabular-nums">{running ? bytes(container.memUsed) : '—'}</dd>
+			<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Restarts</dt>
+			<dd class="font-medium tabular-nums">{container.restartCount}</dd>
+			<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Uptime</dt>
+			<dd class="min-w-0 truncate font-medium">{container.status || '—'}</dd>
+		</dl>
+
+		<div class="group/row mt-3 flex flex-wrap items-center gap-1.5">
+			{#if containerActions(container).includes('open')}
+				<a
+					href={openUrl || undefined}
+					target="_blank"
+					rel="noreferrer"
+					aria-disabled={!openUrl}
+					class={`border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] px-2.5 py-1 text-xs transition ${
+						openUrl
+							? 'hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--theme-fg)_7%,transparent)]'
+							: 'pointer-events-none opacity-40'
+					}`}
+				>
+					Open
+				</a>
+			{/if}
+			<button
+				type="button"
+				onclick={() => toggleLogs(key, host.name, container.name)}
+				class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] px-2.5 py-1 text-xs transition hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--theme-fg)_7%,transparent)]"
+			>
+				Logs
+			</button>
+			{#if running}
+				{@render serviceActionButton(key, host, container, 'restart', true, container.isSelf)}
+				{@render serviceActionButton(key, host, container, 'stop', true, container.isSelf)}
+			{:else}
+				{@render serviceActionButton(key, host, container, 'start', false, container.isSelf)}
+			{/if}
+			<div class="relative">
+				{@render controlMenu(
+					key,
+					container.name,
+					'?/container',
+					[
+						{ name: 'host', value: host.name },
+						{ name: 'name', value: container.name }
+					],
+					running,
+					false,
+					container.isSelf
+				)}
+			</div>
+		</div>
+
+		<details class="mt-3 border-t border-[color-mix(in_srgb,var(--theme-fg)_9%,transparent)] pt-2">
+			<summary class="cursor-pointer text-xs text-[color-mix(in_srgb,var(--theme-fg)_62%,transparent)] transition hover:text-[var(--theme-fg)]">
+				Details
+			</summary>
+			<dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+				<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Image</dt>
+				<dd class="min-w-0 break-words font-medium">{container.image || '—'}</dd>
+				<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">ID</dt>
+				<dd class="font-mono text-[11px]">{shortId(container.id)}</dd>
+				<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Project</dt>
+				<dd class="min-w-0 truncate font-medium">{container.composeProject || '—'}</dd>
+				<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Networks</dt>
+				<dd class="min-w-0 break-words font-medium">
+					{container.networks.map((network) => `${network.name}${network.ip ? ` ${network.ip}` : ''}`).join(' · ') || '—'}
+				</dd>
+				<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Volumes</dt>
+				<dd class="min-w-0 break-words font-medium">
+					{container.mounts.map((mount) => `${mount.source} → ${mount.destination}`).join(' · ') || '—'}
+				</dd>
+				<dt class="text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">Labels</dt>
+				<dd class="min-w-0 break-words font-medium">
+					{Object.entries(container.labels)
+						.filter(([name]) => /^com\.docker\.compose\.|^dash\.|^homepage\./.test(name))
+						.map(([name, value]) => `${name}=${value}`)
+						.join(' · ') || '—'}
+				</dd>
+			</dl>
+		</details>
+
+		<div class="mt-3">
+			{@render serviceLogs(key, host, container)}
+		</div>
+		{@render cardError(key)}
+	</div>
 {/snippet}
 
 {#snippet cardError(key: string)}
@@ -793,33 +1118,25 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 							{@const key = `docker:${host.name}/${container.name}`}
 							{@const running = container.state === 'running'}
 							{@const memPct = pct(container.memUsed, container.memLimit)}
-							{@const healthy = /\(healthy\)/.test(container.status)}
 							{@const inFlight = pending[key]}
-							<div class={`relative ${openMenu === key ? 'z-30' : ''}`}>
+							<div class={`relative ${openMenu === key ? 'z-30' : ''} ${expandedServiceKey === key ? 'sm:col-span-2 xl:col-span-3' : ''}`}>
 								<div
 									title={`${container.image} · ${container.status || 'Stopped'}`}
-									class={`group/row flex items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${running || inFlight ? 'hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)]' : 'opacity-55'}`}
+									role="button"
+									tabindex="0"
+									aria-expanded={expandedServiceKey === key}
+									onclick={() => toggleService(key)}
+									onkeydown={(event) => onServiceRowKeydown(event, key)}
+									class={`group/row flex cursor-pointer items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_60%,transparent)] px-2.5 py-1.5 backdrop-blur transition-colors duration-200 ${expandedServiceKey === key ? 'border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_38%,transparent)]' : ''} ${running || inFlight ? 'hover:border-[color-mix(in_srgb,var(--theme-color12,var(--theme-accent))_50%,transparent)]' : 'opacity-55'}`}
 								>
 									<span
-										class={`h-1.5 w-1.5 shrink-0 ${
-											inFlight
-												? 'animate-pulse bg-[var(--theme-warning)] shadow-[0_0_8px_var(--theme-warning)]'
-												: running
-													? healthy
-														? 'bg-[var(--theme-success)] shadow-[0_0_8px_var(--theme-success)]'
-														: 'bg-[var(--theme-color12,var(--theme-accent))] shadow-[0_0_8px_var(--theme-color12,var(--theme-accent))]'
-													: 'bg-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]'
-										}`}
+										class={`h-1.5 w-1.5 shrink-0 ${statusDotClass(container, inFlight)}`}
 									></span>
 									<span class="min-w-0 flex-1 truncate text-sm font-medium">{container.name}</span>
-									<span class="hidden max-w-32 shrink-0 truncate text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_45%,transparent)] lg:inline">
-										{shortImage(container.image)}
+									<span class="shrink-0 text-[11px] capitalize text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
+										{statusLabel(container, inFlight)}
 									</span>
-									{#if inFlight}
-										<span class="shrink-0 text-[11px] text-[var(--theme-warning)]">
-											{PENDING_LABEL[inFlight.action]}
-										</span>
-									{:else if running}
+									{#if running && !inFlight}
 										<span class="shrink-0 text-[11px] tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]">
 											{container.cpu.toFixed(1)}%
 										</span>
@@ -837,20 +1154,18 @@ pveum user token add dash@pve dash --privsep 0`}</code></pre>
 											stopped
 										</span>
 									{/if}
-									{@render controlMenu(
-										key,
-										container.name,
-										'?/container',
-										[
-											{ name: 'host', value: host.name },
-											{ name: 'name', value: container.name }
-										],
-										running,
-										false,
-										container.isSelf
-									)}
+									<span
+										class={`shrink-0 text-sm text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)] transition ${expandedServiceKey === key ? 'rotate-90' : ''}`}
+										aria-hidden="true"
+									>
+										›
+									</span>
 								</div>
-								{@render cardError(key)}
+								{#if expandedServiceKey === key}
+									{@render serviceInspector(key, host, container, running)}
+								{:else}
+									{@render cardError(key)}
+								{/if}
 							</div>
 						{/each}
 					</div>

@@ -4,10 +4,12 @@ import {
 	CONTAINER_NAME_RE,
 	controlDockerContainer,
 	DOCKER_ACTIONS,
+	dockerContainerLogs,
 	loadDockerHost,
 	type DockerAction,
 	type DockerHostStatus
 } from './docker-ssh';
+import { validateContainerLogRequest } from '$lib/service-inspector.js';
 import { loadNutUps, type NutUpsStatus } from './nut';
 
 export type HomelabStatus = {
@@ -128,6 +130,36 @@ export async function controlContainer(
 	clearHomelabCache();
 
 	return result.ok ? { ok: true } : { ...result, kind: 'upstream' };
+}
+
+export async function loadContainerLogs(
+	hostName: string,
+	containerName: string,
+	lines = 50
+): Promise<HomelabActionResult & { logs?: string }> {
+	const validated = validateContainerLogRequest(hostName, containerName, lines);
+
+	if (!validated.ok) {
+		return { ok: false, error: validated.error, kind: 'validation' };
+	}
+
+	const config = loadHomelabConfig();
+	const host = config?.dockerHosts.find((candidate) => candidate.name === validated.host);
+
+	if (!host) {
+		return { ok: false, error: 'Unknown host.', kind: 'validation' };
+	}
+
+	const status = await loadHomelab();
+	const hostStatus = status.dockerHosts.find((candidate) => candidate.name === validated.host);
+	const known = hostStatus?.containers.some((container) => container.name === validated.name);
+
+	if (!known) {
+		return { ok: false, error: 'Unknown container.', kind: 'validation' };
+	}
+
+	const result = await dockerContainerLogs(host, validated.name, validated.lines);
+	return result.ok ? { ok: true, logs: result.logs } : { ...result, kind: 'upstream' };
 }
 
 // --- SSE support -----------------------------------------------------------
