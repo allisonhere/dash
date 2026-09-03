@@ -45,12 +45,15 @@ body {
 }
 
 /* Surface translucency (Settings → Appearance). When a wallpaper is behind the
-   app, or the opacity slider is below 100, panels drop to
-   --dash-surface-opacity percent of the theme's panel colour; with a wallpaper
-   they also blur what shows through. Scoped like the corner rule: only surfaces
-   painted from --theme-panel / --theme-bg, never the accent/danger tints or the
-   full-bleed background layers themselves. data-surface='solid' (the default,
-   no wallpaper) matches nothing, so the untouched look is unchanged. */
+   app, or the opacity slider is below 100, panels drop to --dash-surface-opacity
+   percent of the theme's panel colour so the wallpaper (or the page colour)
+   reads through. Scoped like the corner rule: only surfaces painted from
+   --theme-panel / --theme-bg, never the accent/danger tints or the full-bleed
+   background layers. data-surface='solid' (the default, no wallpaper) matches
+   nothing, so the untouched look is unchanged.
+
+   The blur lives on the single wallpaper layer (see .dash-wallpaper below), not
+   on the panels — a backdrop-filter on every nested panel melts the compositor. */
 [data-surface='translucent']
 	:is([class*='var(--theme-panel)'], [class*='var(--theme-bg)']):not([class~='fixed']) {
 	background-color: color-mix(
@@ -66,9 +69,16 @@ body {
 	:is([class*='var(--theme-panel)'], [class*='var(--theme-bg)']):not([class~='fixed']) {
 	background-color: color-mix(
 		in srgb,
-		var(--theme-panel) calc(min(var(--dash-surface-opacity, 100), 85) * 1%),
+		var(--theme-panel) calc(min(var(--dash-surface-opacity, 100), 88) * 1%),
 		transparent
 	);
-	backdrop-filter: blur(var(--dash-bg-blur, 8px));
-	-webkit-backdrop-filter: blur(var(--dash-bg-blur, 8px));
+}
+
+.dash-wallpaper {
+	background-size: cover;
+	background-position: center;
+	filter: blur(var(--dash-bg-blur, 0px));
+	/* blur() samples past the element's edges, leaving a soft vignette; scale up
+	   so the blurred image still bleeds to every edge. */
+	scale: 1.05;
 }

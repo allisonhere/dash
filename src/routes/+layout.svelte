@@ -272,8 +272,8 @@
 
 	{#if effectiveTheme.background}
 		<div
-			class="fixed inset-0 -z-30 bg-cover bg-center"
-			style={`background-image: url('${effectiveTheme.background}')`}
+			class="dash-wallpaper fixed inset-0 -z-30"
+			style={`background-image: url("${effectiveTheme.background}")`}
 		></div>
 	{/if}
 

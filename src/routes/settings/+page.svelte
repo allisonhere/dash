@@ -415,9 +415,9 @@
 			<div class="border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] pt-5 md:col-span-2">
 				<h3 class="text-base font-semibold text-[var(--theme-fg)]">Surfaces</h3>
 				<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
-					How solid panels sit over the background. Below 100% the theme background image —
-					or the page colour — shows through; blur frosts what shows through when a theme
-					has a background.
+					How panels sit over the background. Below 100%, the theme's wallpaper — or the
+					page colour — shows through the panels. Background blur softens the wallpaper
+					itself so text on top stays readable.
 				</p>
 
 				<div class="mt-4 grid gap-5 sm:grid-cols-2">
