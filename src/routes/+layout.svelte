@@ -277,7 +277,7 @@
 				dash
 			</a>
 
-			<div class="hidden items-center gap-1 sm:flex">
+			<div class="hidden shrink-0 items-center gap-1 sm:flex">
 				{#each links as link (link.href)}
 					<a
 						href={link.href}
@@ -298,17 +298,21 @@
 				{/each}
 			</div>
 
-			<div class="relative">
-				<button
-					type="button"
-					onclick={openPalette}
-					class="mr-2 inline-flex border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-2.5 py-1.5 text-xs text-[color-mix(in_srgb,var(--theme-fg)_62%,transparent)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-fg)]"
-					aria-label="Open command palette"
+			<button
+				type="button"
+				onclick={openPalette}
+				class="flex min-w-0 flex-1 items-center gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-1.5 text-xs text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-fg)] focus-visible:border-[var(--theme-accent)] focus-visible:outline-none sm:max-w-xs lg:max-w-sm"
+				aria-label="Open command palette"
+			>
+				<span aria-hidden="true" class="shrink-0 text-sm leading-none">⌕</span>
+				<span class="flex-1 truncate text-left">Search bookmarks, pages, services…</span>
+				<kbd
+					class="hidden shrink-0 border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-1 text-[10px] sm:inline"
+					>⌘K</kbd
 				>
-					<span aria-hidden="true" class="sm:hidden">⌕</span>
-					<span class="hidden sm:inline">Search</span>
-					<kbd class="ml-2 hidden border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-1 text-[10px] sm:inline">⌘K</kbd>
-				</button>
+			</button>
+
+			<div class="relative shrink-0">
 				<button
 					type="button"
 					onclick={() => (pickerOpen = !pickerOpen)}
