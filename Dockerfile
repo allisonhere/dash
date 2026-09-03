@@ -15,7 +15,8 @@ ENV NODE_ENV=production PORT=3000 HOST=0.0.0.0 DASH_CONFIG_DIR=/config
 
 # docker-cli: monitor the host's containers via the mounted socket (homelab
 # page, "local" docker host). procps: real uptime/free for the host vitals line.
-RUN apk add --no-cache docker-cli procps
+# git: clone theme repositories for Settings → Themes import.
+RUN apk add --no-cache docker-cli procps git
 
 COPY --from=build /app/build ./build
 COPY --from=build /app/node_modules ./node_modules

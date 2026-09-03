@@ -32,6 +32,8 @@
 	let runningCommand = $state<string | null>(null);
 	let paletteInput = $state<HTMLInputElement>();
 	const effectiveTheme = $derived(data.theme);
+	const builtinThemes = $derived(data.themes.filter((theme) => theme.kind === 'builtin'));
+	const customThemes = $derived(data.themes.filter((theme) => theme.kind === 'custom'));
 	const paletteResults = $derived(rankCommands(paletteCommands, paletteQuery, 12));
 
 	async function selectTheme(name: string) {
@@ -45,7 +47,7 @@
 			await fetch('/theme/select', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ mode: 'builtin', name })
+				body: JSON.stringify({ name })
 			});
 			await invalidate('dash:theme');
 			pickerOpen = false;
@@ -332,26 +334,46 @@
 						onclick={() => (pickerOpen = false)}
 					></div>
 					<div
-						class="absolute right-0 top-full z-40 mt-2 w-56 border border-[color-mix(in_srgb,var(--theme-accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_40%,var(--theme-bg))] p-1.5 shadow-[0_20px_60px_-20px_color-mix(in_srgb,var(--theme-bg)_90%,transparent)] backdrop-blur"
+						class="absolute right-0 top-full z-40 mt-2 max-h-[70vh] w-56 overflow-y-auto border border-[color-mix(in_srgb,var(--theme-accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_40%,var(--theme-bg))] p-1.5 shadow-[0_20px_60px_-20px_color-mix(in_srgb,var(--theme-bg)_90%,transparent)] backdrop-blur"
 						transition:scale={{ duration: 120, start: 0.96 }}
 						role="menu"
 					>
-						<p class="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
-							Built-in themes
-						</p>
-						{#each data.builtins as builtin (builtin.slug)}
-							{@const selected = data.selection.name === builtin.slug}
+						{#snippet themeOption(theme: { slug: string; label: string })}
 							<button
 								type="button"
 								role="menuitem"
 								disabled={switching}
-								onclick={() => selectTheme(builtin.slug)}
-								class={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-sm transition hover:bg-[color-mix(in_srgb,var(--theme-fg)_8%,transparent)] ${selected ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-fg)]'}`}
+								onclick={() => selectTheme(theme.slug)}
+								class={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-sm transition hover:bg-[color-mix(in_srgb,var(--theme-fg)_8%,transparent)] ${data.selection.name === theme.slug ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-fg)]'}`}
 							>
-								{builtin.label}
-								{#if selected}<span aria-hidden="true">✓</span>{/if}
+								{theme.label}
+								{#if data.selection.name === theme.slug}<span aria-hidden="true">✓</span>{/if}
 							</button>
+						{/snippet}
+
+						<p class="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+							Built-in themes
+						</p>
+						{#each builtinThemes as theme (theme.slug)}
+							{@render themeOption(theme)}
 						{/each}
+
+						{#if customThemes.length > 0}
+							<p class="mt-1 border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] px-2 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+								Imported
+							</p>
+							{#each customThemes as theme (theme.slug)}
+								{@render themeOption(theme)}
+							{/each}
+						{/if}
+
+						<a
+							href="/settings"
+							onclick={() => (pickerOpen = false)}
+							class="mt-1 block border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] px-2 pb-1 pt-2 text-xs text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)] transition hover:text-[var(--theme-accent)]"
+						>
+							Manage themes →
+						</a>
 					</div>
 				{/if}
 			</div>

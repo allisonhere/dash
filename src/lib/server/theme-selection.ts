@@ -2,15 +2,25 @@ import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { dashboardConfigPath } from './dashboard-config';
 import { DEFAULT_BUILTIN, isBuiltinTheme, listBuiltinThemes, loadBuiltinTheme } from './builtin-themes';
-import type { DashTheme } from './theme-core';
+import { getCustomTheme, listCustomThemes } from './custom-themes';
+import { composeTheme, type DashTheme } from './theme-core';
 
-export type ThemeMode = 'builtin';
-export type ThemeSelection = { mode: ThemeMode; name: string };
+export type ThemeKind = 'builtin' | 'custom';
+export type ThemeSelection = { mode: ThemeKind; name: string };
+
+export type ThemeSummary = {
+	slug: string;
+	label: string;
+	kind: ThemeKind;
+	/** Present for custom themes only — the stable id for rename/delete. */
+	id?: string;
+	source?: string | null;
+};
 
 export type ResolvedTheme = {
 	theme: DashTheme;
 	selection: ThemeSelection;
-	builtins: Array<{ slug: string; label: string }>;
+	themes: ThemeSummary[];
 };
 
 // Per-instance, stored locally alongside the other custom-dash config. Never
@@ -32,9 +42,8 @@ export function readThemeSelection(): ThemeSelection {
 	}
 
 	const raw = parsed as Record<string, unknown>;
-	const mode = 'builtin';
 	const name = typeof raw.name === 'string' ? raw.name : DEFAULT_BUILTIN;
-	return { mode, name };
+	return { mode: kindOfTheme(name), name };
 }
 
 export function writeThemeSelection(selection: ThemeSelection) {
@@ -45,14 +54,58 @@ export function writeThemeSelection(selection: ThemeSelection) {
 	renameSync(tempFile, SELECTION_FILE);
 }
 
+/** A builtin slug or a custom-theme slug. */
+export function isKnownTheme(slug: string): boolean {
+	return isBuiltinTheme(slug) || Boolean(getCustomTheme(slug));
+}
+
+export function kindOfTheme(slug: string): ThemeKind {
+	return isBuiltinTheme(slug) ? 'builtin' : getCustomTheme(slug) ? 'custom' : 'builtin';
+}
+
+export function listThemes(): ThemeSummary[] {
+	return [
+		...listBuiltinThemes().map((theme) => ({ ...theme, kind: 'builtin' as const })),
+		...listCustomThemes().map((theme) => ({
+			slug: theme.slug,
+			label: theme.label,
+			kind: 'custom' as const,
+			id: theme.id,
+			source: theme.source
+		}))
+	];
+}
+
 export function resolveTheme(): ResolvedTheme {
 	const selection = readThemeSelection();
-	const builtins = listBuiltinThemes();
-	const slug = isBuiltinTheme(selection.name) ? selection.name : DEFAULT_BUILTIN;
+	const themes = listThemes();
+
+	if (isBuiltinTheme(selection.name)) {
+		return {
+			theme: loadBuiltinTheme(selection.name),
+			selection: { mode: 'builtin', name: selection.name },
+			themes
+		};
+	}
+
+	const custom = getCustomTheme(selection.name);
+
+	if (custom) {
+		return {
+			theme: composeTheme({
+				name: custom.label,
+				mode: custom.mode,
+				colors: custom.colors,
+				settings: custom.settings
+			}),
+			selection: { mode: 'custom', name: custom.slug },
+			themes
+		};
+	}
 
 	return {
-		theme: loadBuiltinTheme(slug),
-		selection: { mode: 'builtin', name: slug },
-		builtins
+		theme: loadBuiltinTheme(DEFAULT_BUILTIN),
+		selection: { mode: 'builtin', name: DEFAULT_BUILTIN },
+		themes
 	};
 }

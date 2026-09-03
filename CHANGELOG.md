@@ -7,6 +7,15 @@ to `master`.
 
 ### Added
 
+- Added a theme manager in Settings → Themes. Paste a theme repository's git URL
+  (the same URL `omarchy-theme-install` takes) and Dash clones it, converts its
+  `colors.toml` / `alacritty.toml` (and `walker.css` / `hyprland.conf` when
+  present) into a native palette, applies it, and stores it per instance in
+  `themes.json`. Imported themes can be renamed, activated, and deleted, and they
+  are included in the Dash backup file.
+- Added `omarchy-theme-core.js` with unit tests for the Omarchy colour parsers
+  and the palette composer.
+- Bundled `git` in the container image so theme repositories can be cloned.
 - Added a link check in Settings that requests every bookmark and reports the
   broken, unreachable, blocked, and moved ones. Results stream in over
   server-sent events as each link is checked. LAN hosts are checked without TLS
@@ -19,6 +28,11 @@ to `master`.
 
 ### Changed
 
+- The Dash backup format is now version 2: it also carries imported themes, and
+  the theme selection may be `custom`. Version 1 backups still restore (with no
+  imported themes).
+- Fixed the theme picker not applying a selection without a full reload — the
+  layout load now depends on the `dash:theme` key the picker invalidates.
 - Replaced the generated Svelte README with setup, testing, data, deployment,
   PWA, and security documentation.
 - Added this changelog from the repository's commit history.

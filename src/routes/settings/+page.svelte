@@ -118,6 +118,29 @@
 	let selectedBackupName = $state('');
 	let restoring = $state(false);
 
+	let themeUrl = $state('');
+	let themeNameOverride = $state('');
+	let importingTheme = $state(false);
+	let confirmingThemeDelete = $state<string | null>(null);
+	let themeLabelDrafts = $state<Record<string, string>>({});
+
+	// Keep the rename drafts in step with the server list; leave a row alone
+	// while it holds an unsaved edit of its own.
+	$effect(() => {
+		const themes = data.themes;
+
+		untrack(() => {
+			themeLabelDrafts = Object.fromEntries(
+				themes
+					.filter((theme) => theme.kind === 'custom')
+					.map((theme) => {
+						const draft = themeLabelDrafts[theme.slug];
+						return [theme.slug, draft != null && draft !== theme.label ? draft : theme.label];
+					})
+			);
+		});
+	});
+
 	// Re-seed the row drafts whenever the server data changes, so a saved row
 	// snaps back to the persisted values instead of holding a stale edit. Rows
 	// with an unsaved edit of their own are left alone rather than being wiped
@@ -383,6 +406,163 @@
 				</div>
 			</div>
 		</form>
+	</section>
+
+	<section class="mt-12">
+		<div class="flex items-center gap-3">
+			<h2 class="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
+				Themes
+			</h2>
+			<span class="text-xs text-[color-mix(in_srgb,var(--theme-fg)_42%,transparent)]">
+				{data.themes.length}
+			</span>
+			<div class="h-px flex-1 bg-linear-to-r from-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] to-transparent"></div>
+		</div>
+
+		<form
+			method="POST"
+			action="?/themeImport"
+			class="mt-4 flex flex-col gap-2 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] p-3 backdrop-blur"
+			use:enhance={() => {
+				importingTheme = true;
+				return async ({ result, update }) => {
+					await update();
+					importingTheme = false;
+					if (result.type === 'success') {
+						themeUrl = '';
+						themeNameOverride = '';
+					}
+				};
+			}}
+		>
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+				<input
+					name="url"
+					required
+					bind:value={themeUrl}
+					placeholder="Theme git URL, e.g. https://github.com/user/omarchy-theme"
+					class="min-w-0 flex-1 border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-2 text-sm outline-none transition placeholder:text-[color-mix(in_srgb,var(--theme-fg)_32%,transparent)] focus:border-[var(--theme-accent)]"
+				/>
+				<input
+					name="name"
+					bind:value={themeNameOverride}
+					placeholder="Name (optional)"
+					class="border border-[color-mix(in_srgb,var(--theme-fg)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)] px-3 py-2 text-sm outline-none transition placeholder:text-[color-mix(in_srgb,var(--theme-fg)_32%,transparent)] focus:border-[var(--theme-accent)] sm:w-40"
+				/>
+				<button
+					type="submit"
+					disabled={importingTheme}
+					class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-bg)] transition hover:-translate-y-px disabled:opacity-60"
+				>
+					{importingTheme ? 'Cloning…' : 'Import theme'}
+				</button>
+			</div>
+			<p class="text-xs leading-5 text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+				Clones the repository and converts its <code>colors.toml</code> / <code>alacritty.toml</code>
+				(and <code>walker.css</code> / <code>hyprland.conf</code> if present) into a Dash theme. The
+				imported theme is applied straight away and stored on this instance.
+			</p>
+		</form>
+
+		<ul
+			class="mt-3 border border-[color-mix(in_srgb,var(--theme-fg)_11%,transparent)] bg-[color-mix(in_srgb,var(--theme-panel)_62%,transparent)] backdrop-blur"
+		>
+			{#each data.themes as theme (theme.slug)}
+				{@const active = data.activeTheme === theme.slug}
+				<li
+					class="group/theme relative border-b border-[color-mix(in_srgb,var(--theme-fg)_9%,transparent)] transition last:border-b-0 hover:bg-[color-mix(in_srgb,var(--theme-fg)_4%,transparent)]"
+					in:fade={{ duration: 150 }}
+				>
+					<div class="flex flex-wrap items-center gap-1.5 px-3 py-2">
+						<span
+							class="shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {theme.kind ===
+							'custom'
+								? 'border-[color-mix(in_srgb,var(--theme-accent)_45%,transparent)] text-[var(--theme-accent)]'
+								: 'border-[color-mix(in_srgb,var(--theme-fg)_18%,transparent)] text-[color-mix(in_srgb,var(--theme-fg)_55%,transparent)]'}"
+						>
+							{theme.kind === 'custom' ? 'Imported' : 'Built-in'}
+						</span>
+
+						{#if theme.kind === 'custom'}
+							<form
+								method="POST"
+								action="?/themeRename"
+								use:enhance
+								class="flex min-w-0 flex-1 items-center gap-1.5"
+							>
+								<input type="hidden" name="id" value={theme.id} />
+								<input
+									name="label"
+									required
+									bind:value={themeLabelDrafts[theme.slug]}
+									aria-label="Theme name"
+									class="min-w-0 flex-1 border border-transparent bg-transparent px-1.5 py-1.5 text-sm font-medium outline-none transition focus:border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] focus:bg-[color-mix(in_srgb,var(--theme-panel)_55%,transparent)]"
+								/>
+								{#if (themeLabelDrafts[theme.slug] ?? theme.label).trim() !== theme.label}
+									<button
+										type="submit"
+										transition:fade={{ duration: 100 }}
+										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-2.5 py-1 text-xs font-semibold text-[var(--theme-bg)]"
+									>
+										Save
+									</button>
+								{/if}
+							</form>
+						{:else}
+							<span class="min-w-0 flex-1 px-1.5 py-1.5 text-sm font-medium text-[var(--theme-fg)]">
+								{theme.label}
+							</span>
+						{/if}
+
+						{#if active}
+							<span
+								class="shrink-0 border border-[color-mix(in_srgb,var(--theme-success)_50%,transparent)] px-2 py-1 text-[11px] font-semibold text-[var(--theme-success)]"
+							>
+								Active
+							</span>
+						{:else}
+							<form method="POST" action="?/themeActivate" use:enhance class="shrink-0">
+								<input type="hidden" name="slug" value={theme.slug} />
+								<button
+									type="submit"
+									class="border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-2.5 py-1 text-xs transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+								>
+									Use
+								</button>
+							</form>
+						{/if}
+
+						{#if theme.kind === 'custom'}
+							<form method="POST" action="?/themeDelete" use:enhance class="shrink-0">
+								<input type="hidden" name="id" value={theme.id} />
+								<button
+									type="submit"
+									onclick={(event) => {
+										if (confirmingThemeDelete !== theme.slug) {
+											event.preventDefault();
+											confirmingThemeDelete = theme.slug;
+										}
+									}}
+									class={`border px-2.5 py-1 text-xs transition ${
+										confirmingThemeDelete === theme.slug
+											? 'border-[var(--theme-danger)] bg-[color-mix(in_srgb,var(--theme-danger)_22%,transparent)] text-[var(--theme-fg)]'
+											: 'border-transparent text-[color-mix(in_srgb,var(--theme-danger)_75%,transparent)] opacity-0 hover:border-[color-mix(in_srgb,var(--theme-danger)_40%,transparent)] focus:opacity-100 group-hover/theme:opacity-100'
+									}`}
+								>
+									{confirmingThemeDelete === theme.slug ? 'Confirm' : 'Delete'}
+								</button>
+							</form>
+						{/if}
+					</div>
+
+					{#if theme.kind === 'custom' && theme.source}
+						<p class="truncate px-3 pb-2 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]">
+							{theme.source}
+						</p>
+					{/if}
+				</li>
+			{/each}
+		</ul>
 	</section>
 
 	<section class="mt-12">

@@ -1,5 +1,9 @@
 export const BACKUP_FORMAT = 'dash-backup';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
+
+// Versions this build can still read. v1 files predate imported themes and are
+// restored with an empty `customThemes` list.
+export const SUPPORTED_BACKUP_VERSIONS = [1, 2];
 
 /**
  * @typedef {{
@@ -16,22 +20,35 @@ export const BACKUP_VERSION = 1;
 
 /** @typedef {{ id: string; title: string; url: string }} BackupFeed */
 /** @typedef {{ id: string; name: string; color: string }} BackupGroup */
-/** @typedef {{ mode: 'builtin'; name: string }} BackupTheme */
+/** @typedef {{ mode: 'builtin' | 'custom'; name: string }} BackupTheme */
+/**
+ * @typedef {{
+ *   id: string;
+ *   slug: string;
+ *   label: string;
+ *   mode: 'light' | 'dark';
+ *   colors: Partial<Record<string, string>>;
+ *   settings: Partial<Record<string, string>>;
+ *   source: string | null;
+ *   importedAt: string;
+ * }} BackupCustomTheme
+ */
 
 /**
  * @typedef {{
  *   format: typeof BACKUP_FORMAT;
- *   version: typeof BACKUP_VERSION;
+ *   version: number;
  *   exportedAt: string;
  *   bookmarks: BackupBookmark[];
  *   feeds: BackupFeed[];
  *   groups: BackupGroup[];
  *   theme: BackupTheme;
+ *   customThemes: BackupCustomTheme[];
  * }} DashBackup
  */
 
 /**
- * @param {{ bookmarks: BackupBookmark[]; feeds: BackupFeed[]; groups: BackupGroup[]; theme: BackupTheme }} data
+ * @param {{ bookmarks: BackupBookmark[]; feeds: BackupFeed[]; groups: BackupGroup[]; theme: BackupTheme; customThemes?: BackupCustomTheme[] }} data
  * @param {Date} [exportedAt]
  * @returns {DashBackup}
  */
@@ -43,7 +60,8 @@ export function createBackupDocument(data, exportedAt = new Date()) {
 		bookmarks: data.bookmarks,
 		feeds: data.feeds,
 		groups: data.groups,
-		theme: data.theme
+		theme: data.theme,
+		customThemes: data.customThemes ?? []
 	};
 }
 
@@ -65,15 +83,20 @@ export function parseBackupDocument(input) {
 
 	const root = record(parsed, 'The selected file is not a Dash backup.');
 
-	if (root.format !== BACKUP_FORMAT || root.version !== BACKUP_VERSION) {
+	if (root.format !== BACKUP_FORMAT || !SUPPORTED_BACKUP_VERSIONS.includes(Number(root.version))) {
 		throw new Error('This backup format or version is not supported.');
 	}
 
+	const version = Number(root.version);
 	const exportedAt = dateString(root.exportedAt, 'Backup date');
 	const bookmarks = array(root.bookmarks, 'Bookmarks').map(bookmark);
 	const feeds = array(root.feeds, 'Feeds').map(feed);
 	const groups = array(root.groups, 'Groups').map(group);
 	const theme = backupTheme(root.theme);
+	const customThemes =
+		root.customThemes === undefined
+			? []
+			: array(root.customThemes, 'Themes').map(customTheme);
 
 	uniqueIds(bookmarks, 'bookmarks');
 	uniqueIds(feeds, 'feeds');
@@ -82,15 +105,20 @@ export function parseBackupDocument(input) {
 		groups.map((item) => item.name.toLowerCase()),
 		'group names'
 	);
+	uniqueValues(
+		customThemes.map((item) => item.slug),
+		'theme slugs'
+	);
 
 	return {
 		format: BACKUP_FORMAT,
-		version: BACKUP_VERSION,
+		version,
 		exportedAt,
 		bookmarks,
 		feeds,
 		groups,
-		theme
+		theme,
+		customThemes
 	};
 }
 
@@ -170,14 +198,72 @@ function group(value) {
 function backupTheme(value) {
 	const item = record(value, 'The theme selection in the backup is invalid.');
 
-	if (item.mode !== 'builtin') {
-		throw new Error('Theme mode must be builtin.');
+	if (item.mode !== 'builtin' && item.mode !== 'custom') {
+		throw new Error('Theme mode must be builtin or custom.');
 	}
 
 	return {
 		mode: item.mode,
 		name: requiredString(item.name, 'Theme name')
 	};
+}
+
+const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/** @param {unknown} value @returns {BackupCustomTheme} */
+function customTheme(value) {
+	const item = record(value, 'An imported theme in the backup is invalid.');
+	const mode = item.mode === 'light' ? 'light' : item.mode === 'dark' ? 'dark' : null;
+
+	if (!mode) {
+		throw new Error('Imported theme mode must be light or dark.');
+	}
+
+	return {
+		id: requiredString(item.id, 'Theme ID'),
+		slug: requiredString(item.slug, 'Theme slug'),
+		label: requiredString(item.label, 'Theme name'),
+		mode,
+		colors: hexMap(item.colors, 'Theme colors'),
+		settings: stringMap(item.settings),
+		source: item.source == null ? null : optionalString(item.source, 'Theme source'),
+		importedAt: dateString(item.importedAt ?? new Date(0).toISOString(), 'Theme import date')
+	};
+}
+
+/** @param {unknown} value @param {string} label @returns {Record<string, string>} */
+function hexMap(value, label) {
+	const item = record(value, `${label} must be an object of colours.`);
+	/** @type {Record<string, string>} */
+	const out = {};
+
+	for (const [key, hex] of Object.entries(item)) {
+		if (typeof hex !== 'string' || !HEX.test(hex)) {
+			throw new Error(`${label} contains an invalid value: ${String(hex)}`);
+		}
+		out[key] = hex;
+	}
+
+	return out;
+}
+
+/** @param {unknown} value @returns {Record<string, string>} */
+function stringMap(value) {
+	if (value === undefined || value === null) {
+		return {};
+	}
+
+	const item = record(value, 'Theme settings must be an object.');
+	/** @type {Record<string, string>} */
+	const out = {};
+
+	for (const [key, raw] of Object.entries(item)) {
+		if (typeof raw === 'string') {
+			out[key] = raw;
+		}
+	}
+
+	return out;
 }
 
 /** @param {unknown} value @param {string} message */
