@@ -225,6 +225,22 @@ export function readHyprlandBorder(hyprland) {
 	return match ? `#${match[1]}` : undefined;
 }
 
+const IMAGE_EXT = /\.(jpe?g|png|webp|avif|gif)$/i;
+
+/**
+ * The wallpaper to lift out of a theme's `backgrounds/` directory: the first
+ * image by case-insensitive name order, so the choice is stable.
+ * @param {string[]} fileNames
+ * @returns {string | null}
+ */
+export function pickBackgroundFile(fileNames) {
+	const images = fileNames
+		.filter((name) => IMAGE_EXT.test(name))
+		.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+	return images[0] ?? null;
+}
+
 /**
  * Fold the four Omarchy source files into the palette shape the server's
  * composeTheme (src/lib/server/theme-core.ts) accepts: background/foreground/

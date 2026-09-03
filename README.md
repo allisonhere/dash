@@ -11,7 +11,8 @@ mounted at `/config`.
 - RSS and Atom feed reader with per-feed error reporting
 - Live Proxmox, Docker, and NUT UPS status with guarded power controls
 - Built-in themes, plus Omarchy themes imported by git URL and managed from
-  Settings → Themes
+  Settings → Themes — each with an optional wallpaper and adjustable panel
+  opacity / background blur
 - Responsive desktop and mobile navigation with safe-area spacing
 - Installable PWA metadata and app icons
 - Versioned backup and restore for bookmarks, feeds, groups, theme selection, and
@@ -124,13 +125,17 @@ The production Compose file mounts `./data` at `/config`.
 | `groups.json` | Saved group names and colors |
 | `theme.json` | Selected theme (a built-in or an imported slug) |
 | `themes.json` | Themes imported from a git URL, converted to Dash palettes |
-| `appearance.json` | Card-corner style and radius |
+| `backgrounds.json` + `backgrounds/` | Per-theme wallpaper index and image files |
+| `appearance.json` | Card corners + radius, surface opacity, background blur |
 | `homelab.json` | Proxmox, Docker host, and NUT connection settings |
 
-`theme.json`, `themes.json`, and `appearance.json` are per-instance and are
-never written to a shared `DASH_STORE_URL`; imported themes travel through the
-Dash backup file instead. Importing a theme clones its repository with `git`,
-which is bundled in the container image.
+`theme.json`, `themes.json`, `backgrounds*`, and `appearance.json` are
+per-instance and are never written to a shared `DASH_STORE_URL`. Imported theme
+metadata travels through the Dash backup file; wallpaper images do **not** (they
+would blow the backup size), so a restored theme keeps its palette but its
+background must be re-imported (from the saved git URL) or re-uploaded in
+Settings → Themes. Importing a theme clones its repository with `git`, which is
+bundled in the container image.
 
 Settings also has a link check that requests every bookmark and reports the
 broken, unreachable, blocked, and moved ones. Hosts on the LAN are checked

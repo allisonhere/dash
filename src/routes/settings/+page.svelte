@@ -98,11 +98,15 @@
 	// it and the layout picks up the new value from the server.
 	let corners = $state<'sharp' | 'round'>(untrack(() => data.appearance.corners));
 	let radius = $state(untrack(() => data.appearance.radius));
+	let surfaceOpacity = $state(untrack(() => data.appearance.surfaceOpacity));
+	let backgroundBlur = $state(untrack(() => data.appearance.backgroundBlur));
 	let appearanceForm = $state<HTMLFormElement | null>(null);
 
 	$effect(() => {
 		corners = data.appearance.corners;
 		radius = data.appearance.radius;
+		surfaceOpacity = data.appearance.surfaceOpacity;
+		backgroundBlur = data.appearance.backgroundBlur;
 	});
 
 	// The form posts the hidden inputs, which Svelte only updates once the
@@ -307,6 +311,8 @@
 		>
 			<input type="hidden" name="corners" value={corners} />
 			<input type="hidden" name="radius" value={radius} />
+			<input type="hidden" name="surfaceOpacity" value={surfaceOpacity} />
+			<input type="hidden" name="backgroundBlur" value={backgroundBlur} />
 
 			<div>
 				<h3 class="text-base font-semibold text-[var(--theme-fg)]">Card corners</h3>
@@ -403,6 +409,59 @@
 					>
 						Button
 					</button>
+				</div>
+			</div>
+
+			<div class="border-t border-[color-mix(in_srgb,var(--theme-fg)_10%,transparent)] pt-5 md:col-span-2">
+				<h3 class="text-base font-semibold text-[var(--theme-fg)]">Surfaces</h3>
+				<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
+					How solid panels sit over the background. Below 100% the theme background image —
+					or the page colour — shows through; blur frosts what shows through when a theme
+					has a background.
+				</p>
+
+				<div class="mt-4 grid gap-5 sm:grid-cols-2">
+					<div>
+						<div class="flex items-baseline justify-between">
+							<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_72%,transparent)]">
+								Surface opacity
+							</span>
+							<span class="text-xs tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+								{surfaceOpacity}%
+							</span>
+						</div>
+						<input
+							type="range"
+							min="40"
+							max="100"
+							step="1"
+							aria-label="Surface opacity"
+							bind:value={surfaceOpacity}
+							onchange={saveAppearance}
+							class="mt-2 w-full accent-[var(--theme-accent)]"
+						/>
+					</div>
+
+					<div>
+						<div class="flex items-baseline justify-between">
+							<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_72%,transparent)]">
+								Background blur
+							</span>
+							<span class="text-xs tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+								{backgroundBlur}px
+							</span>
+						</div>
+						<input
+							type="range"
+							min="0"
+							max="24"
+							step="1"
+							aria-label="Background blur"
+							bind:value={backgroundBlur}
+							onchange={saveAppearance}
+							class="mt-2 w-full accent-[var(--theme-accent)]"
+						/>
+					</div>
 				</div>
 			</div>
 		</form>
@@ -555,11 +614,55 @@
 						{/if}
 					</div>
 
-					{#if theme.kind === 'custom' && theme.source}
-						<p class="truncate px-3 pb-2 text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_40%,transparent)]">
-							{theme.source}
-						</p>
-					{/if}
+					<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 pb-2.5">
+						{#if theme.hasBackground}
+							<img
+								src={`/theme/background?slug=${theme.slug}&v=${theme.backgroundVersion ?? 0}`}
+								alt=""
+								class="h-8 w-14 shrink-0 border border-[color-mix(in_srgb,var(--theme-fg)_18%,transparent)] object-cover"
+							/>
+						{/if}
+
+						<form
+							method="POST"
+							action="?/themeBackgroundUpload"
+							enctype="multipart/form-data"
+							use:enhance
+							class="flex min-w-0 items-center gap-2"
+						>
+							<input type="hidden" name="slug" value={theme.slug} />
+							<label
+								class="cursor-pointer border border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] px-2 py-1 text-[11px] transition hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+							>
+								{theme.hasBackground ? 'Replace background' : 'Set background'}
+								<input
+									type="file"
+									name="image"
+									accept="image/png,image/jpeg,image/webp,image/avif,image/gif"
+									class="sr-only"
+									onchange={(event) => event.currentTarget.form?.requestSubmit()}
+								/>
+							</label>
+						</form>
+
+						{#if theme.hasBackground}
+							<form method="POST" action="?/themeBackgroundClear" use:enhance>
+								<input type="hidden" name="slug" value={theme.slug} />
+								<button
+									type="submit"
+									class="text-[11px] text-[color-mix(in_srgb,var(--theme-danger)_75%,transparent)] underline-offset-2 transition hover:text-[var(--theme-danger)] hover:underline"
+								>
+									Remove background
+								</button>
+							</form>
+						{/if}
+
+						{#if theme.kind === 'custom' && theme.source}
+							<span class="min-w-0 flex-1 truncate text-right text-[11px] text-[color-mix(in_srgb,var(--theme-fg)_38%,transparent)]">
+								{theme.source}
+							</span>
+						{/if}
+					</div>
 				</li>
 			{/each}
 		</ul>

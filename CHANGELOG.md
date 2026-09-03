@@ -13,8 +13,17 @@ to `master`.
   present) into a native palette, applies it, and stores it per instance in
   `themes.json`. Imported themes can be renamed, activated, and deleted, and they
   are included in the Dash backup file.
-- Added `omarchy-theme-core.js` with unit tests for the Omarchy colour parsers
-  and the palette composer.
+- Added per-theme wallpapers. An imported theme brings the first image from its
+  `backgrounds/` folder; any theme (built-ins included) can also have one set or
+  cleared by hand in Settings → Themes. The active theme's wallpaper is painted
+  behind every page. Images live in `backgrounds/` in the config dir and are
+  excluded from the backup.
+- Added "Surface opacity" and "Background blur" sliders to Settings → Appearance.
+  Below 100% opacity, panels let the wallpaper (or page colour) show through;
+  with a wallpaper they also blur what shows through. Stored in `appearance.json`.
+- Added `omarchy-theme-core.js` with unit tests for the Omarchy colour parsers,
+  the palette composer, and wallpaper selection; unit tests for the appearance
+  clamps.
 - Bundled `git` in the container image so theme repositories can be cloned.
 - Added a link check in Settings that requests every bookmark and reports the
   broken, unreachable, blocked, and moved ones. Results stream in over

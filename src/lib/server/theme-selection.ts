@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { dashboardConfigPath } from './dashboard-config';
 import { DEFAULT_BUILTIN, isBuiltinTheme, listBuiltinThemes, loadBuiltinTheme } from './builtin-themes';
 import { getCustomTheme, listCustomThemes } from './custom-themes';
+import { getBackground, readBackgroundIndex } from './backgrounds';
 import { composeTheme, type DashTheme } from './theme-core';
 
 export type ThemeKind = 'builtin' | 'custom';
@@ -15,6 +16,8 @@ export type ThemeSummary = {
 	/** Present for custom themes only — the stable id for rename/delete. */
 	id?: string;
 	source?: string | null;
+	hasBackground: boolean;
+	backgroundVersion: number | null;
 };
 
 export type ResolvedTheme = {
@@ -64,16 +67,39 @@ export function kindOfTheme(slug: string): ThemeKind {
 }
 
 export function listThemes(): ThemeSummary[] {
+	const backgrounds = readBackgroundIndex();
+	const bg = (slug: string) => ({
+		hasBackground: slug in backgrounds,
+		backgroundVersion: backgrounds[slug]?.updatedAt ?? null
+	});
+
 	return [
-		...listBuiltinThemes().map((theme) => ({ ...theme, kind: 'builtin' as const })),
+		...listBuiltinThemes().map((theme) => ({ ...theme, kind: 'builtin' as const, ...bg(theme.slug) })),
 		...listCustomThemes().map((theme) => ({
 			slug: theme.slug,
 			label: theme.label,
 			kind: 'custom' as const,
 			id: theme.id,
-			source: theme.source
+			source: theme.source,
+			...bg(theme.slug)
 		}))
 	];
+}
+
+// Attach the wallpaper URL for `slug`, if one is stored, to a freshly composed
+// theme. The ?v= is the file's save time so each URL can be cached immutably.
+function withBackground(theme: DashTheme, slug: string): DashTheme {
+	const found = getBackground(slug);
+
+	if (!found) {
+		return theme;
+	}
+
+	return {
+		...theme,
+		background: `/theme/background?slug=${encodeURIComponent(slug)}&v=${found.updatedAt}`,
+		backgroundVersion: found.updatedAt
+	};
 }
 
 export function resolveTheme(): ResolvedTheme {
@@ -82,7 +108,7 @@ export function resolveTheme(): ResolvedTheme {
 
 	if (isBuiltinTheme(selection.name)) {
 		return {
-			theme: loadBuiltinTheme(selection.name),
+			theme: withBackground(loadBuiltinTheme(selection.name), selection.name),
 			selection: { mode: 'builtin', name: selection.name },
 			themes
 		};
@@ -92,19 +118,22 @@ export function resolveTheme(): ResolvedTheme {
 
 	if (custom) {
 		return {
-			theme: composeTheme({
-				name: custom.label,
-				mode: custom.mode,
-				colors: custom.colors,
-				settings: custom.settings
-			}),
+			theme: withBackground(
+				composeTheme({
+					name: custom.label,
+					mode: custom.mode,
+					colors: custom.colors,
+					settings: custom.settings
+				}),
+				custom.slug
+			),
 			selection: { mode: 'custom', name: custom.slug },
 			themes
 		};
 	}
 
 	return {
-		theme: loadBuiltinTheme(DEFAULT_BUILTIN),
+		theme: withBackground(loadBuiltinTheme(DEFAULT_BUILTIN), DEFAULT_BUILTIN),
 		selection: { mode: 'builtin', name: DEFAULT_BUILTIN },
 		themes
 	};

@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { composeThemeFromFiles } from '$lib/omarchy-theme-core.js';
+import { composeThemeFromFiles, pickBackgroundFile } from '$lib/omarchy-theme-core.js';
+import { MAX_BACKGROUND_BYTES, normalizeImageExt } from './backgrounds';
 import { composeTheme, type DashTheme, type ThemeColors, type ThemeSettings } from './theme-core';
 
 const run = promisify(execFile);
@@ -34,6 +35,7 @@ export type ImportedTheme = {
 	mode: 'light' | 'dark';
 	theme: DashTheme;
 	source: string;
+	background: { ext: string; bytes: Buffer } | null;
 };
 
 export function assertGitUrl(url: string): string {
@@ -94,10 +96,53 @@ export async function importOmarchyThemeFromGit(
 			settings: palette.settings as ThemeSettings
 		});
 
-		return { label, mode: palette.mode, theme, source: url };
+		return { label, mode: palette.mode, theme, source: url, background: readBackground(themeDir) };
 	} finally {
 		rmSync(workDir, { recursive: true, force: true });
 	}
+}
+
+// The wallpaper an Omarchy theme ships in `backgrounds/` (or a bare
+// `background.<ext>`). Skipped silently when absent or over the size cap.
+function readBackground(themeDir: string): { ext: string; bytes: Buffer } | null {
+	const candidates: string[] = [];
+	const backgroundsDir = join(themeDir, 'backgrounds');
+
+	if (existsSync(backgroundsDir)) {
+		try {
+			const pick = pickBackgroundFile(readdirSync(backgroundsDir));
+
+			if (pick) {
+				candidates.push(join(backgroundsDir, pick));
+			}
+		} catch {
+			// unreadable dir — fall through
+		}
+	}
+
+	for (const ext of ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif']) {
+		candidates.push(join(themeDir, `background${ext}`));
+	}
+
+	for (const path of candidates) {
+		const ext = normalizeImageExt(extname(path));
+
+		if (!ext) {
+			continue;
+		}
+
+		try {
+			if (statSync(path).size > MAX_BACKGROUND_BYTES) {
+				continue;
+			}
+
+			return { ext, bytes: readFileSync(path) };
+		} catch {
+			// missing / unreadable — try the next candidate
+		}
+	}
+
+	return null;
 }
 
 async function cloneRepo(url: string, workDir: string): Promise<void> {

@@ -1,6 +1,12 @@
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { clampRadius, DEFAULT_APPEARANCE, type Appearance } from '$lib/appearance';
+import {
+	clampBackgroundBlur,
+	clampRadius,
+	clampSurfaceOpacity,
+	DEFAULT_APPEARANCE,
+	type Appearance
+} from '$lib/appearance';
 import { dashboardConfigPath } from './dashboard-config';
 
 // Per-instance, like the theme selection: how a dash looks on this screen is a
@@ -24,7 +30,9 @@ export function readAppearance(): Appearance {
 
 	return {
 		corners: raw.corners === 'round' ? 'round' : 'sharp',
-		radius: clampRadius(raw.radius)
+		radius: clampRadius(raw.radius),
+		surfaceOpacity: clampSurfaceOpacity(raw.surfaceOpacity),
+		backgroundBlur: clampBackgroundBlur(raw.backgroundBlur)
 	};
 }
 

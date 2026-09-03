@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { countByGroup, createGroup, deleteGroup, listGroups, updateGroup } from '$lib/server/groups';
 import { restoreDashBackup } from '$lib/server/backup';
-import { clampRadius } from '$lib/appearance';
+import { clampBackgroundBlur, clampRadius, clampSurfaceOpacity } from '$lib/appearance';
 import { readAppearance, writeAppearance } from '$lib/server/appearance';
 import {
 	isKnownTheme,
@@ -12,6 +12,12 @@ import {
 } from '$lib/server/theme-selection';
 import { createCustomTheme, deleteCustomTheme, renameCustomTheme } from '$lib/server/custom-themes';
 import { importOmarchyThemeFromGit } from '$lib/server/omarchy-import';
+import {
+	deleteBackground,
+	MAX_BACKGROUND_BYTES,
+	normalizeImageExt,
+	saveBackground
+} from '$lib/server/backgrounds';
 import { DEFAULT_BUILTIN } from '$lib/server/builtin-themes';
 
 const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
@@ -71,7 +77,9 @@ export const actions = {
 
 		writeAppearance({
 			corners: formData.get('corners') === 'round' ? 'round' : 'sharp',
-			radius: clampRadius(formData.get('radius'))
+			radius: clampRadius(formData.get('radius')),
+			surfaceOpacity: clampSurfaceOpacity(formData.get('surfaceOpacity')),
+			backgroundBlur: clampBackgroundBlur(formData.get('backgroundBlur'))
 		});
 
 		return { ok: true, intent: 'appearance' };
@@ -134,12 +142,72 @@ export const actions = {
 				source: imported.source
 			});
 
+			let note = '';
+
+			if (imported.background) {
+				try {
+					saveBackground(created.slug, imported.background.ext, imported.background.bytes);
+					note = ' with its wallpaper';
+				} catch {
+					// A theme without its wallpaper is still worth keeping.
+				}
+			}
+
 			writeThemeSelection({ mode: 'custom', name: created.slug });
 
-			return { ok: true, intent: 'themeImport', message: `Imported and applied "${created.label}".` };
+			return {
+				ok: true,
+				intent: 'themeImport',
+				message: `Imported and applied "${created.label}"${note}.`
+			};
 		} catch (error) {
 			return fail(400, { ok: false, intent: 'themeImport', message: getMessage(error) });
 		}
+	},
+
+	themeBackgroundUpload: async ({ request }) => {
+		const formData = await request.formData();
+		const slug = text(formData.get('slug'));
+		const image = formData.get('image');
+
+		if (!isKnownTheme(slug)) {
+			return fail(400, { ok: false, intent: 'themeBackground', message: 'Unknown theme.' });
+		}
+
+		if (!(image instanceof File) || image.size === 0) {
+			return fail(400, { ok: false, intent: 'themeBackground', message: 'Choose an image file.' });
+		}
+
+		if (image.size > MAX_BACKGROUND_BYTES) {
+			return fail(400, {
+				ok: false,
+				intent: 'themeBackground',
+				message: `The image is larger than the ${Math.round(MAX_BACKGROUND_BYTES / 1024 / 1024)} MB limit.`
+			});
+		}
+
+		const ext = normalizeImageExt(image.name.slice(image.name.lastIndexOf('.')));
+
+		if (!ext) {
+			return fail(400, {
+				ok: false,
+				intent: 'themeBackground',
+				message: 'Background must be a JPG, PNG, WebP, AVIF, or GIF image.'
+			});
+		}
+
+		try {
+			saveBackground(slug, ext, new Uint8Array(await image.arrayBuffer()));
+			return { ok: true, intent: 'themeBackground' };
+		} catch (error) {
+			return fail(400, { ok: false, intent: 'themeBackground', message: getMessage(error) });
+		}
+	},
+
+	themeBackgroundClear: async ({ request }) => {
+		const formData = await request.formData();
+		deleteBackground(text(formData.get('slug')));
+		return { ok: true, intent: 'themeBackground' };
 	},
 
 	themeRename: async ({ request }) => {
@@ -170,6 +238,7 @@ export const actions = {
 
 		try {
 			const removed = deleteCustomTheme(text(formData.get('id')));
+			deleteBackground(removed.slug);
 
 			if (readThemeSelection().name === removed.slug) {
 				writeThemeSelection({ mode: 'builtin', name: DEFAULT_BUILTIN });

@@ -261,9 +261,21 @@
 <div
 	class="relative isolate min-h-dvh pb-16 text-[var(--theme-fg)] sm:pb-0"
 	data-corners={data.appearance.corners}
-	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}; --dash-radius: ${data.appearance.radius}px`}
+	data-surface={effectiveTheme.background
+		? 'image'
+		: data.appearance.surfaceOpacity < 100
+			? 'translucent'
+			: 'solid'}
+	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}; --dash-radius: ${data.appearance.radius}px; --dash-surface-opacity: ${data.appearance.surfaceOpacity}; --dash-bg-blur: ${data.appearance.backgroundBlur}px`}
 >
 	<div class="fixed inset-0 -z-30 bg-[var(--theme-bg)]"></div>
+
+	{#if effectiveTheme.background}
+		<div
+			class="fixed inset-0 -z-30 bg-cover bg-center"
+			style={`background-image: url('${effectiveTheme.background}')`}
+		></div>
+	{/if}
 
 	<div
 		class="fixed inset-0 -z-20 bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--theme-accent)_18%,transparent),transparent_34rem)]"

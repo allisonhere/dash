@@ -3,7 +3,8 @@ import { describe, it } from 'node:test';
 import {
 	composeThemeFromFiles,
 	parseAlacrittyToml,
-	parseOmarchyThemeToml
+	parseOmarchyThemeToml,
+	pickBackgroundFile
 } from './omarchy-theme-core.js';
 
 describe('omarchy theme parser', () => {
@@ -142,5 +143,25 @@ describe('composeThemeFromFiles', () => {
 		});
 
 		assert.equal(palette.colors.background, '#000000');
+	});
+});
+
+describe('pickBackgroundFile', () => {
+	it('takes the first image by case-insensitive name order', () => {
+		assert.equal(
+			pickBackgroundFile(['2-sunset.jpg', '1-forest.png', 'notes.txt']),
+			'1-forest.png'
+		);
+	});
+
+	it('ignores non-image entries and returns null when there are none', () => {
+		assert.equal(pickBackgroundFile(['readme.md', 'colors.toml', 'backgrounds']), null);
+		assert.equal(pickBackgroundFile([]), null);
+	});
+
+	it('accepts every supported extension', () => {
+		for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif']) {
+			assert.equal(pickBackgroundFile([`wall.${ext}`]), `wall.${ext}`);
+		}
 	});
 });
