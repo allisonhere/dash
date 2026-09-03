@@ -107,16 +107,20 @@ body {
 }
 
 /* Panel elevation (Settings → Appearance). A two-layer drop shadow — a tight
-   contact shadow plus a soft cast — scaled by --dash-shadow (0-5). Same panel
-   scope as the surface rule; skips full-bleed layers, the sticky nav, and
-   anything that already ships its own shadow (the palette / picker overlays).
-   data-shadow='off' (--dash-shadow 0, the default) matches nothing. */
-[data-shadow='on']
-	:is(
-		[class*='bg-[var(--theme-bg)]'],
-		[class*='bg-[color-mix(in_srgb,var(--theme-panel)'],
-		[class*='bg-[color-mix(in_srgb,var(--theme-bg)']
-	):not([class~='fixed']):not(nav):not([class*='shadow-[']) {
+   contact shadow plus a soft cast — scaled by --dash-shadow (0-5), on the same
+   panel scope as the surface rule (minus full-bleed layers and the sticky nav).
+   Wrapped in :where() so it carries zero specificity: any element that ships its
+   own box-shadow utility — the palette / picker overlays, or a card's
+   hover:shadow-[…] glow — still wins, at rest or on hover. data-shadow='off'
+   (--dash-shadow 0, the default) matches nothing, so the flat look is unchanged. */
+:where(
+	[data-shadow='on']
+		:is(
+			[class*='bg-[var(--theme-bg)]'],
+			[class*='bg-[color-mix(in_srgb,var(--theme-panel)'],
+			[class*='bg-[color-mix(in_srgb,var(--theme-bg)']
+		):not([class~='fixed']):not(nav)
+) {
 	box-shadow:
 		0 calc(var(--dash-shadow, 0) * 1px) calc(var(--dash-shadow, 0) * 2px)
 			calc(var(--dash-shadow, 0) * -0.5px)
