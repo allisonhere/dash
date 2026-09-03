@@ -49,9 +49,9 @@ body {
    --dash-surface-opacity percent of the theme's panel colour; with a wallpaper
    they also blur what shows through. Scoped like the corner rule: only surfaces
    painted from --theme-panel / --theme-bg, never the accent/danger tints or the
-   full-bleed background layers themselves. data-surface='solid' (the default)
-   matches nothing, so the untouched look is unchanged. */
-:is([data-surface='translucent'], [data-surface='image'])
+   full-bleed background layers themselves. data-surface='solid' (the default,
+   no wallpaper) matches nothing, so the untouched look is unchanged. */
+[data-surface='translucent']
 	:is([class*='var(--theme-panel)'], [class*='var(--theme-bg)']):not([class~='fixed']) {
 	background-color: color-mix(
 		in srgb,
@@ -60,8 +60,15 @@ body {
 	);
 }
 
+/* With a wallpaper the panel opacity is capped below 100 so the image always
+   reads through the frosted panels, not only in the gutters between them. */
 [data-surface='image']
 	:is([class*='var(--theme-panel)'], [class*='var(--theme-bg)']):not([class~='fixed']) {
+	background-color: color-mix(
+		in srgb,
+		var(--theme-panel) calc(min(var(--dash-surface-opacity, 100), 85) * 1%),
+		transparent
+	);
 	backdrop-filter: blur(var(--dash-bg-blur, 8px));
 	-webkit-backdrop-filter: blur(var(--dash-bg-blur, 8px));
 }
