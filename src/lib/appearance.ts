@@ -7,6 +7,7 @@ export type Appearance = {
 	radius: number;
 	surfaceOpacity: number;
 	backgroundBlur: number;
+	shadow: number;
 };
 
 export const RADIUS_PRESETS = [
@@ -28,11 +29,18 @@ export const MAX_SURFACE_OPACITY = 100;
 export const MIN_BACKGROUND_BLUR = 0;
 export const MAX_BACKGROUND_BLUR = 24;
 
+// Panel drop-shadow depth. 0 keeps the flat, border-only look; each step adds
+// offset, blur, and darkness to a two-layer shadow under cards, panels, and
+// list surfaces.
+export const MIN_SHADOW = 0;
+export const MAX_SHADOW = 5;
+
 export const DEFAULT_APPEARANCE: Appearance = {
 	corners: 'sharp',
 	radius: 8,
 	surfaceOpacity: 100,
-	backgroundBlur: 8
+	backgroundBlur: 8,
+	shadow: 0
 };
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -55,4 +63,8 @@ export function clampSurfaceOpacity(value: unknown): number {
 
 export function clampBackgroundBlur(value: unknown): number {
 	return clampInt(value, MIN_BACKGROUND_BLUR, MAX_BACKGROUND_BLUR, DEFAULT_APPEARANCE.backgroundBlur);
+}
+
+export function clampShadow(value: unknown): number {
+	return clampInt(value, MIN_SHADOW, MAX_SHADOW, DEFAULT_APPEARANCE.shadow);
 }

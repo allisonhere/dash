@@ -266,7 +266,8 @@
 		: data.appearance.surfaceOpacity < 100
 			? 'translucent'
 			: 'solid'}
-	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}; --dash-radius: ${data.appearance.radius}px; --dash-surface-opacity: ${data.appearance.surfaceOpacity}; --dash-bg-blur: ${data.appearance.backgroundBlur}px`}
+	data-shadow={data.appearance.shadow > 0 ? 'on' : 'off'}
+	style={`${effectiveTheme.cssText}; color-scheme: ${effectiveTheme.mode}; --dash-radius: ${data.appearance.radius}px; --dash-surface-opacity: ${data.appearance.surfaceOpacity}; --dash-bg-blur: ${data.appearance.backgroundBlur}px; --dash-shadow: ${data.appearance.shadow}`}
 >
 	<div class="fixed inset-0 -z-30 bg-[var(--theme-bg)]"></div>
 

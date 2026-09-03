@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
 	clampBackgroundBlur,
 	clampRadius,
+	clampShadow,
 	clampSurfaceOpacity,
 	DEFAULT_APPEARANCE
 } from './appearance.ts';
@@ -28,5 +29,12 @@ describe('appearance clamps', () => {
 		assert.equal(clampBackgroundBlur(40), 24);
 		assert.equal(clampBackgroundBlur('8'), 8);
 		assert.equal(clampBackgroundBlur(null), DEFAULT_APPEARANCE.backgroundBlur);
+	});
+
+	it('keeps shadow inside 0..5', () => {
+		assert.equal(clampShadow(-2), 0);
+		assert.equal(clampShadow(99), 5);
+		assert.equal(clampShadow('3'), 3);
+		assert.equal(clampShadow(undefined), DEFAULT_APPEARANCE.shadow);
 	});
 });

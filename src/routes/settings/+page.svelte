@@ -100,6 +100,7 @@
 	let radius = $state(untrack(() => data.appearance.radius));
 	let surfaceOpacity = $state(untrack(() => data.appearance.surfaceOpacity));
 	let backgroundBlur = $state(untrack(() => data.appearance.backgroundBlur));
+	let shadow = $state(untrack(() => data.appearance.shadow));
 	let appearanceForm = $state<HTMLFormElement | null>(null);
 
 	$effect(() => {
@@ -107,6 +108,7 @@
 		radius = data.appearance.radius;
 		surfaceOpacity = data.appearance.surfaceOpacity;
 		backgroundBlur = data.appearance.backgroundBlur;
+		shadow = data.appearance.shadow;
 	});
 
 	// The form posts the hidden inputs, which Svelte only updates once the
@@ -313,6 +315,7 @@
 			<input type="hidden" name="radius" value={radius} />
 			<input type="hidden" name="surfaceOpacity" value={surfaceOpacity} />
 			<input type="hidden" name="backgroundBlur" value={backgroundBlur} />
+			<input type="hidden" name="shadow" value={shadow} />
 
 			<div>
 				<h3 class="text-base font-semibold text-[var(--theme-fg)]">Card corners</h3>
@@ -388,7 +391,8 @@
 
 			<div
 				data-corners={corners}
-				style={`--dash-radius: ${radius}px`}
+				data-shadow="on"
+				style={`--dash-radius: ${radius}px; --dash-shadow: ${shadow}`}
 				class="grid gap-2"
 			>
 				<span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
@@ -417,10 +421,12 @@
 				<p class="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--theme-fg)_58%,transparent)]">
 					How panels sit over the background. Below 100%, the theme's wallpaper — or the
 					page colour — shows through the panels. Background blur softens the wallpaper
-					itself so text on top stays readable.
+					itself so text on top stays readable. Elevation adds a drop shadow under every
+					card and panel.
 				</p>
 
-				<div class="mt-4 grid gap-5 sm:grid-cols-2">
+				<div class="mt-4 grid gap-5 sm:grid-cols-3">
+
 					<div>
 						<div class="flex items-baseline justify-between">
 							<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_72%,transparent)]">
@@ -458,6 +464,27 @@
 							step="1"
 							aria-label="Background blur"
 							bind:value={backgroundBlur}
+							onchange={saveAppearance}
+							class="mt-2 w-full accent-[var(--theme-accent)]"
+						/>
+					</div>
+
+					<div>
+						<div class="flex items-baseline justify-between">
+							<span class="text-xs font-medium text-[color-mix(in_srgb,var(--theme-fg)_72%,transparent)]">
+								Elevation
+							</span>
+							<span class="text-xs tabular-nums text-[color-mix(in_srgb,var(--theme-fg)_50%,transparent)]">
+								{shadow === 0 ? 'None' : shadow}
+							</span>
+						</div>
+						<input
+							type="range"
+							min="0"
+							max="5"
+							step="1"
+							aria-label="Elevation"
+							bind:value={shadow}
 							onchange={saveAppearance}
 							class="mt-2 w-full accent-[var(--theme-accent)]"
 						/>

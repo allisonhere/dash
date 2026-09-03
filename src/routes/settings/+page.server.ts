@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { countByGroup, createGroup, deleteGroup, listGroups, updateGroup } from '$lib/server/groups';
 import { restoreDashBackup } from '$lib/server/backup';
-import { clampBackgroundBlur, clampRadius, clampSurfaceOpacity } from '$lib/appearance';
+import { clampBackgroundBlur, clampRadius, clampShadow, clampSurfaceOpacity } from '$lib/appearance';
 import { readAppearance, writeAppearance } from '$lib/server/appearance';
 import {
 	isKnownTheme,
@@ -74,7 +74,8 @@ export const actions = {
 			corners: formData.get('corners') === 'round' ? 'round' : 'sharp',
 			radius: clampRadius(formData.get('radius')),
 			surfaceOpacity: clampSurfaceOpacity(formData.get('surfaceOpacity')),
-			backgroundBlur: clampBackgroundBlur(formData.get('backgroundBlur'))
+			backgroundBlur: clampBackgroundBlur(formData.get('backgroundBlur')),
+			shadow: clampShadow(formData.get('shadow'))
 		});
 
 		return { ok: true, intent: 'appearance' };

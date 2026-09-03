@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import {
 	clampBackgroundBlur,
 	clampRadius,
+	clampShadow,
 	clampSurfaceOpacity,
 	DEFAULT_APPEARANCE,
 	type Appearance
@@ -32,7 +33,8 @@ export function readAppearance(): Appearance {
 		corners: raw.corners === 'round' ? 'round' : 'sharp',
 		radius: clampRadius(raw.radius),
 		surfaceOpacity: clampSurfaceOpacity(raw.surfaceOpacity),
-		backgroundBlur: clampBackgroundBlur(raw.backgroundBlur)
+		backgroundBlur: clampBackgroundBlur(raw.backgroundBlur),
+		shadow: clampShadow(raw.shadow)
 	};
 }
 
