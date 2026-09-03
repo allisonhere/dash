@@ -12,12 +12,7 @@ import {
 } from '$lib/server/theme-selection';
 import { createCustomTheme, deleteCustomTheme, renameCustomTheme } from '$lib/server/custom-themes';
 import { importOmarchyThemeFromGit } from '$lib/server/omarchy-import';
-import {
-	deleteBackground,
-	MAX_BACKGROUND_BYTES,
-	normalizeImageExt,
-	saveBackground
-} from '$lib/server/backgrounds';
+import { deleteBackground, MAX_BACKGROUND_BYTES, saveBackground } from '$lib/server/backgrounds';
 import { DEFAULT_BUILTIN } from '$lib/server/builtin-themes';
 
 const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
@@ -146,7 +141,7 @@ export const actions = {
 
 			if (imported.background) {
 				try {
-					saveBackground(created.slug, imported.background.ext, imported.background.bytes);
+					await saveBackground(created.slug, imported.background);
 					note = ' with its wallpaper';
 				} catch {
 					// A theme without its wallpaper is still worth keeping.
@@ -186,18 +181,10 @@ export const actions = {
 			});
 		}
 
-		const ext = normalizeImageExt(image.name.slice(image.name.lastIndexOf('.')));
-
-		if (!ext) {
-			return fail(400, {
-				ok: false,
-				intent: 'themeBackground',
-				message: 'Background must be a JPG, PNG, WebP, AVIF, or GIF image.'
-			});
-		}
-
 		try {
-			saveBackground(slug, ext, new Uint8Array(await image.arrayBuffer()));
+			// saveBackground runs it through sharp — that both validates it is an
+			// image and downscales it to a light WebP.
+			await saveBackground(slug, new Uint8Array(await image.arrayBuffer()));
 			return { ok: true, intent: 'themeBackground' };
 		} catch (error) {
 			return fail(400, { ok: false, intent: 'themeBackground', message: getMessage(error) });

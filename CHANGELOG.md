@@ -16,11 +16,16 @@ to `master`.
 - Added per-theme wallpapers. An imported theme brings the first image from its
   `backgrounds/` folder; any theme (built-ins included) can also have one set or
   cleared by hand in Settings → Themes. The active theme's wallpaper is painted
-  behind every page. Images live in `backgrounds/` in the config dir and are
-  excluded from the backup.
+  behind every page. Incoming images are downscaled with `sharp` to a ≤2560px
+  WebP before storage (Omarchy themes ship 8K PNGs that otherwise freeze the
+  browser), stored in `backgrounds/` in the config dir, and excluded from the
+  backup. The container sets `BODY_SIZE_LIMIT=42M` so a full-size upload gets
+  through the Node adapter.
 - Added "Surface opacity" and "Background blur" sliders to Settings → Appearance.
-  Below 100% opacity, panels let the wallpaper (or page colour) show through;
-  with a wallpaper they also blur what shows through. Stored in `appearance.json`.
+  Below 100% opacity, panels let the wallpaper (or page colour) show through. The
+  blur softens the wallpaper image itself (on one layer — an earlier build put a
+  backdrop-filter on every panel, which froze the compositor). Stored in
+  `appearance.json`.
 - Added `omarchy-theme-core.js` with unit tests for the Omarchy colour parsers,
   the palette composer, and wallpaper selection; unit tests for the appearance
   clamps.

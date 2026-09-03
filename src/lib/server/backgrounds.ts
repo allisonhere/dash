@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import sharp from 'sharp';
 import { dashboardConfigPath } from './dashboard-config';
 
 // Per-instance wallpapers, one per theme slug, in the mounted config volume.
@@ -9,15 +10,28 @@ import { dashboardConfigPath } from './dashboard-config';
 const BACKGROUNDS_DIR = dashboardConfigPath('backgrounds');
 const INDEX_FILE = dashboardConfigPath('backgrounds.json');
 
-export const MAX_BACKGROUND_BYTES = 12 * 1024 * 1024;
+// Ceiling on the *incoming* file. Omarchy themes routinely ship 15-25 MB PNGs
+// (some 8K); they are downscaled to a WebP well under 1 MB before being stored,
+// so this only guards against absurd uploads. BODY_SIZE_LIMIT in the image is
+// set above this so a hand upload this large reaches the handler.
+export const MAX_BACKGROUND_BYTES = 40 * 1024 * 1024;
 
-export const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'] as const;
+// Every stored wallpaper is normalised to this: a browser painting (and
+// blurring) a 33-megapixel background freezes the compositor, so cap the long
+// edge and re-encode. 2560px covers a 1440p display crisply and upscales fine
+// on 4K, especially behind translucent panels.
+const WALLPAPER_MAX_DIM = 2560;
+const WALLPAPER_QUALITY = 80;
+
+// The one extension anything is stored as now; the others are still recognised
+// so wallpapers saved by an older build keep resolving until they're replaced.
+export const IMAGE_EXTS = ['.webp', '.jpg', '.jpeg', '.png', '.avif', '.gif'] as const;
 
 export const IMAGE_MIME: Record<string, string> = {
+	'.webp': 'image/webp',
 	'.jpg': 'image/jpeg',
 	'.jpeg': 'image/jpeg',
 	'.png': 'image/png',
-	'.webp': 'image/webp',
 	'.avif': 'image/avif',
 	'.gif': 'image/gif'
 };
@@ -76,13 +90,11 @@ export function getBackground(
 	return { path: join(BACKGROUNDS_DIR, `${slug}${entry.ext}`), ext: entry.ext, updatedAt: entry.updatedAt };
 }
 
-export function saveBackground(slug: string, rawExt: string, bytes: Uint8Array): IndexEntry {
-	const ext = normalizeImageExt(rawExt);
-
-	if (!ext) {
-		throw new Error('Background must be a JPG, PNG, WebP, AVIF, or GIF image.');
-	}
-
+/**
+ * Downscale + re-encode an arbitrary image to a lightweight WebP suitable for a
+ * full-page background. Throws if the bytes are not a decodable image.
+ */
+export async function processWallpaper(bytes: Uint8Array): Promise<Buffer> {
 	if (bytes.byteLength === 0) {
 		throw new Error('The image file is empty.');
 	}
@@ -93,15 +105,34 @@ export function saveBackground(slug: string, rawExt: string, bytes: Uint8Array):
 		);
 	}
 
+	try {
+		return await sharp(bytes, { failOn: 'error' })
+			.rotate() // honour EXIF orientation before resizing
+			.resize({
+				width: WALLPAPER_MAX_DIM,
+				height: WALLPAPER_MAX_DIM,
+				fit: 'inside',
+				withoutEnlargement: true
+			})
+			.webp({ quality: WALLPAPER_QUALITY })
+			.toBuffer();
+	} catch {
+		throw new Error('That file could not be read as an image.');
+	}
+}
+
+export async function saveBackground(slug: string, bytes: Uint8Array): Promise<IndexEntry> {
+	const webp = await processWallpaper(bytes);
+
 	mkdirSync(BACKGROUNDS_DIR, { recursive: true });
 	removeSlugFiles(slug);
 
-	const target = join(BACKGROUNDS_DIR, `${slug}${ext}`);
+	const target = join(BACKGROUNDS_DIR, `${slug}.webp`);
 	const temp = `${target}.tmp`;
-	writeFileSync(temp, bytes);
+	writeFileSync(temp, webp);
 	renameSync(temp, target);
 
-	const entry: IndexEntry = { ext, updatedAt: Date.now() };
+	const entry: IndexEntry = { ext: '.webp', updatedAt: Date.now() };
 	writeIndex({ ...readBackgroundIndex(), [slug]: entry });
 	return entry;
 }

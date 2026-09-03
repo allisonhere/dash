@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, extname, join } from 'node:path';
+import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import { composeThemeFromFiles, pickBackgroundFile } from '$lib/omarchy-theme-core.js';
-import { MAX_BACKGROUND_BYTES, normalizeImageExt } from './backgrounds';
+import { MAX_BACKGROUND_BYTES } from './backgrounds';
 import { composeTheme, type DashTheme, type ThemeColors, type ThemeSettings } from './theme-core';
 
 const run = promisify(execFile);
@@ -35,7 +35,8 @@ export type ImportedTheme = {
 	mode: 'light' | 'dark';
 	theme: DashTheme;
 	source: string;
-	background: { ext: string; bytes: Buffer } | null;
+	/** Raw wallpaper bytes from the repo; downscaled by saveBackground on persist. */
+	background: Buffer | null;
 };
 
 export function assertGitUrl(url: string): string {
@@ -102,9 +103,12 @@ export async function importOmarchyThemeFromGit(
 	}
 }
 
+const REPO_IMAGE_EXT = /\.(jpe?g|png|webp|avif|gif)$/i;
+
 // The wallpaper an Omarchy theme ships in `backgrounds/` (or a bare
-// `background.<ext>`). Skipped silently when absent or over the size cap.
-function readBackground(themeDir: string): { ext: string; bytes: Buffer } | null {
+// `background.<ext>`). Returned raw; saveBackground downscales it on persist.
+// Skipped silently when absent or over the (generous) input ceiling.
+function readBackground(themeDir: string): Buffer | null {
 	const candidates: string[] = [];
 	const backgroundsDir = join(themeDir, 'backgrounds');
 
@@ -125,9 +129,7 @@ function readBackground(themeDir: string): { ext: string; bytes: Buffer } | null
 	}
 
 	for (const path of candidates) {
-		const ext = normalizeImageExt(extname(path));
-
-		if (!ext) {
+		if (!REPO_IMAGE_EXT.test(path)) {
 			continue;
 		}
 
@@ -136,7 +138,7 @@ function readBackground(themeDir: string): { ext: string; bytes: Buffer } | null
 				continue;
 			}
 
-			return { ext, bytes: readFileSync(path) };
+			return readFileSync(path);
 		} catch {
 			// missing / unreadable — try the next candidate
 		}

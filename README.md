@@ -125,7 +125,7 @@ The production Compose file mounts `./data` at `/config`.
 | `groups.json` | Saved group names and colors |
 | `theme.json` | Selected theme (a built-in or an imported slug) |
 | `themes.json` | Themes imported from a git URL, converted to Dash palettes |
-| `backgrounds.json` + `backgrounds/` | Per-theme wallpaper index and image files |
+| `backgrounds.json` + `backgrounds/` | Per-theme wallpapers, downscaled to WebP on import/upload |
 | `appearance.json` | Card corners + radius, surface opacity, background blur |
 | `homelab.json` | Proxmox, Docker host, and NUT connection settings |
 
