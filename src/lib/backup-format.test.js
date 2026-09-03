@@ -50,7 +50,7 @@ describe('Dash backup format', () => {
 	it('rejects removed theme modes', () => {
 		const document = createBackupDocument({
 			...sample,
-			theme: { mode: 'external', name: '' }
+			theme: /** @type {any} */ ({ mode: 'external', name: '' })
 		});
 		assert.throws(() => parseBackupDocument(document), /Theme mode must be builtin/);
 	});
