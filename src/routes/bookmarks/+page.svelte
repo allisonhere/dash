@@ -433,7 +433,7 @@
 			<button
 				type="button"
 				onclick={openCreate}
-				class="border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-bg)] shadow-[0_8px_28px_-10px_color-mix(in_srgb,var(--theme-accent)_75%,transparent)] transition hover:-translate-y-px hover:shadow-[0_12px_32px_-10px_color-mix(in_srgb,var(--theme-accent)_90%,transparent)]"
+				class="border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-on-accent)] shadow-[0_8px_28px_-10px_color-mix(in_srgb,var(--theme-accent)_75%,transparent)] transition hover:-translate-y-px hover:shadow-[0_12px_32px_-10px_color-mix(in_srgb,var(--theme-accent)_90%,transparent)]"
 			>
 				＋ New bookmark
 			</button>
@@ -543,7 +543,7 @@
 			<button
 				type="button"
 				onclick={openCreate}
-				class="mt-6 border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-bg)] transition hover:-translate-y-px"
+				class="mt-6 border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-on-accent)] transition hover:-translate-y-px"
 			>
 				Add a bookmark
 			</button>
@@ -748,7 +748,7 @@
 					</button>
 					<button
 						type="submit"
-						class="border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-bg)] shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--theme-accent)_80%,transparent)] transition hover:-translate-y-px"
+						class="border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-on-accent)] shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--theme-accent)_80%,transparent)] transition hover:-translate-y-px"
 					>
 						{editing ? 'Save changes' : 'Create bookmark'}
 					</button>

@@ -7,6 +7,14 @@ to `master`.
 
 ### Added
 
+- Added a WCAG contrast pass when a theme is composed. An imported palette whose
+  foreground or accent reads fine in a terminal but not as body text / headings /
+  button labels is nudged toward black or white just enough to clear 4.5:1
+  (foreground) or 3:1 (accent and the status colours) against the background;
+  palettes that already pass — every built-in theme — are untouched. Filled
+  accent buttons now take their label colour from a new `--theme-on-accent`
+  (plain black or white, whichever reads on the accent). New `contrast.js` with
+  unit tests.
 - Added a theme manager in Settings → Themes. Paste a theme repository's git URL
   (the same URL `omarchy-theme-install` takes) and Dash clones it, converts its
   `colors.toml` / `alacritty.toml` (and `walker.css` / `hyprland.conf` when

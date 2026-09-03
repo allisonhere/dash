@@ -1,3 +1,5 @@
+import { bestTextOn, ensureReadable } from '$lib/contrast.js';
+
 export type ThemeMode = 'light' | 'dark';
 export type ThemeColorKey =
 	| 'accent'
@@ -38,6 +40,26 @@ export function composeTheme(input: {
 	colors.selectionBackground ??= colors.accent;
 	colors.selectionForeground ??= colors.foreground;
 
+	// Contrast pass: an imported palette can carry a muddy foreground or accent
+	// that reads fine in a terminal but not as body text / headings / button
+	// labels here. Nudge each toward black or white just enough to clear a WCAG
+	// ratio against the background (4.5:1 for body text, 3:1 for the accent,
+	// which is used for large text and UI). Colours that already pass are left
+	// untouched, so the built-in themes don't move.
+	if (colors.background) {
+		const bg = colors.background;
+
+		if (colors.foreground) {
+			colors.foreground = ensureReadable(colors.foreground, bg, 4.5);
+		}
+
+		for (const key of ['accent', 'color1', 'color2', 'color3', 'color6'] as const) {
+			if (colors[key]) {
+				colors[key] = ensureReadable(colors[key]!, bg, 3);
+			}
+		}
+	}
+
 	const cssVariables = themeToCssVariables({ colors, settings });
 
 	return {
@@ -77,6 +99,11 @@ export function themeToCssVariables(theme: {
 
 	addAlias(cssVariables, '--theme-bg', theme.colors.background);
 	addAlias(cssVariables, '--theme-fg', theme.colors.foreground);
+	// Label colour for filled accent buttons — plain black or white, whichever
+	// reads on the (already contrast-checked) accent.
+	if (theme.colors.accent) {
+		cssVariables['--theme-on-accent'] = bestTextOn(theme.colors.accent);
+	}
 	addAlias(cssVariables, '--theme-border', theme.colors.border);
 	addAlias(cssVariables, '--theme-panel', theme.colors.color0);
 	addAlias(cssVariables, '--theme-muted', theme.colors.color8);

@@ -332,7 +332,7 @@
 							}}
 							class={`flex-1 border px-4 py-2 text-sm font-semibold transition hover:-translate-y-px ${
 								corners === option.value
-									? 'border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] text-[var(--theme-bg)]'
+									? 'border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] text-[var(--theme-on-accent)]'
 									: 'border-[color-mix(in_srgb,var(--theme-fg)_16%,transparent)] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]'
 							}`}
 						>
@@ -405,7 +405,7 @@
 					<button
 						type="button"
 						tabindex="-1"
-						class="mt-3 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-bg)]"
+						class="mt-3 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-on-accent)]"
 					>
 						Button
 					</button>
@@ -511,7 +511,7 @@
 				<button
 					type="submit"
 					disabled={importingTheme}
-					class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-bg)] transition hover:-translate-y-px disabled:opacity-60"
+					class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-on-accent)] transition hover:-translate-y-px disabled:opacity-60"
 				>
 					{importingTheme ? 'Cloning…' : 'Import theme'}
 				</button>
@@ -561,7 +561,7 @@
 									<button
 										type="submit"
 										transition:fade={{ duration: 100 }}
-										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-2.5 py-1 text-xs font-semibold text-[var(--theme-bg)]"
+										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-2.5 py-1 text-xs font-semibold text-[var(--theme-on-accent)]"
 									>
 										Save
 									</button>
@@ -705,7 +705,7 @@
 
 			<button
 				type="submit"
-				class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-bg)] transition hover:-translate-y-px"
+				class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-on-accent)] transition hover:-translate-y-px"
 			>
 				＋ Add group
 			</button>
@@ -755,7 +755,7 @@
 									<button
 										type="submit"
 										transition:fade={{ duration: 100 }}
-										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-2.5 py-1 text-xs font-semibold text-[var(--theme-bg)] transition"
+										class="shrink-0 border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-2.5 py-1 text-xs font-semibold text-[var(--theme-on-accent)] transition"
 									>
 										Save
 									</button>
@@ -834,7 +834,7 @@
 					class={`shrink-0 border px-4 py-2 text-sm font-semibold transition hover:-translate-y-px active:translate-y-px ${
 						checking
 							? 'border-[color-mix(in_srgb,var(--theme-danger)_55%,transparent)] text-[var(--theme-fg)]'
-							: 'border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] text-[var(--theme-bg)]'
+							: 'border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] text-[var(--theme-on-accent)]'
 					}`}
 				>
 					{checking ? 'Stop' : summary.total > 0 ? 'Check again' : 'Check links'}
@@ -959,7 +959,7 @@
 				<a
 					href="/settings/backup"
 					download
-					class="mt-4 inline-flex border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-bg)] transition hover:-translate-y-px active:translate-y-px"
+					class="mt-4 inline-flex border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-on-accent)] transition hover:-translate-y-px active:translate-y-px"
 				>
 					Download backup
 				</a>

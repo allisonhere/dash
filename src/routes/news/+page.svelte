@@ -230,7 +230,7 @@
 			<button
 				type="button"
 				onclick={() => (managing = true)}
-				class="border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-bg)] shadow-[0_8px_28px_-10px_color-mix(in_srgb,var(--theme-accent)_75%,transparent)] transition hover:-translate-y-px hover:shadow-[0_12px_32px_-10px_color-mix(in_srgb,var(--theme-accent)_90%,transparent)]"
+				class="border border-[color-mix(in_srgb,var(--theme-accent)_60%,transparent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-on-accent)] shadow-[0_8px_28px_-10px_color-mix(in_srgb,var(--theme-accent)_75%,transparent)] transition hover:-translate-y-px hover:shadow-[0_12px_32px_-10px_color-mix(in_srgb,var(--theme-accent)_90%,transparent)]"
 			>
 				Manage feeds
 			</button>
@@ -301,7 +301,7 @@
 			<button
 				type="button"
 				onclick={() => (managing = true)}
-				class="mt-6 border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-bg)] transition hover:-translate-y-px"
+				class="mt-6 border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--theme-on-accent)] transition hover:-translate-y-px"
 			>
 				Add a feed
 			</button>
@@ -468,7 +468,7 @@
 
 					<button
 						type="submit"
-						class="self-end border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-bg)] shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--theme-accent)_80%,transparent)] transition hover:-translate-y-px"
+						class="self-end border border-[var(--theme-accent)] bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-on-accent)] shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--theme-accent)_80%,transparent)] transition hover:-translate-y-px"
 					>
 						Add feed
 					</button>
