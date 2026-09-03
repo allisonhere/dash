@@ -21,11 +21,14 @@ to `master`.
   browser), stored in `backgrounds/` in the config dir, and excluded from the
   backup. The container sets `BODY_SIZE_LIMIT=42M` so a full-size upload gets
   through the Node adapter.
-- Added "Surface opacity" and "Background blur" sliders to Settings → Appearance.
-  Below 100% opacity, panels let the wallpaper (or page colour) show through. The
-  blur softens the wallpaper image itself (on one layer — an earlier build put a
-  backdrop-filter on every panel, which froze the compositor). Stored in
-  `appearance.json`.
+- Added "Surface opacity" and "Background blur" sliders to Settings → Appearance,
+  stored in `appearance.json`. Below 100% opacity, panels let the wallpaper (or
+  page colour) show through; a theme-coloured scrim behind the panels keeps a
+  bright wallpaper from washing out the text, and panel opacity is floored at 60%
+  when a wallpaper is active. The blur is applied once to the wallpaper layer
+  (an earlier build put a backdrop-filter on every panel, which froze the
+  compositor; another matched `text-[var(--theme-bg)]` and painted over primary
+  buttons — the translucency rule now targets only `bg-` utilities).
 - Added `omarchy-theme-core.js` with unit tests for the Omarchy colour parsers,
   the palette composer, and wallpaper selection; unit tests for the appearance
   clamps.

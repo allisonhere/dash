@@ -275,6 +275,9 @@
 			class="dash-wallpaper fixed inset-0 -z-30"
 			style={`background-image: url("${effectiveTheme.background}")`}
 		></div>
+		<!-- Mutes the wallpaper so text keeps its contrast; stronger as the panels
+		     are made more transparent (Settings → Appearance surface opacity). -->
+		<div class="dash-scrim fixed inset-0 -z-30"></div>
 	{/if}
 
 	<div

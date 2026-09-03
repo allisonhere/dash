@@ -47,15 +47,22 @@ body {
 /* Surface translucency (Settings → Appearance). When a wallpaper is behind the
    app, or the opacity slider is below 100, panels drop to --dash-surface-opacity
    percent of the theme's panel colour so the wallpaper (or the page colour)
-   reads through. Scoped like the corner rule: only surfaces painted from
-   --theme-panel / --theme-bg, never the accent/danger tints or the full-bleed
-   background layers. data-surface='solid' (the default, no wallpaper) matches
+   reads through. data-surface='solid' (the default, no wallpaper) matches
    nothing, so the untouched look is unchanged.
+
+   The selector matches ONLY a `bg-` utility built from --theme-panel / --theme-bg
+   (Tailwind writes the source string verbatim into the class attribute). It must
+   not catch `text-[var(--theme-bg)]`, borders, or accent fills — doing so paints
+   over primary buttons and hides their labels.
 
    The blur lives on the single wallpaper layer (see .dash-wallpaper below), not
    on the panels — a backdrop-filter on every nested panel melts the compositor. */
 [data-surface='translucent']
-	:is([class*='var(--theme-panel)'], [class*='var(--theme-bg)']):not([class~='fixed']) {
+	:is(
+		[class*='bg-[var(--theme-bg)]'],
+		[class*='bg-[color-mix(in_srgb,var(--theme-panel)'],
+		[class*='bg-[color-mix(in_srgb,var(--theme-bg)']
+	):not([class~='fixed']) {
 	background-color: color-mix(
 		in srgb,
 		var(--theme-panel) calc(var(--dash-surface-opacity, 100) * 1%),
@@ -64,12 +71,17 @@ body {
 }
 
 /* With a wallpaper the panel opacity is capped below 100 so the image always
-   reads through the frosted panels, not only in the gutters between them. */
+   reads through the frosted panels, not only in the gutters between them, and
+   floored at 60 so text keeps some contrast even at the low end of the slider. */
 [data-surface='image']
-	:is([class*='var(--theme-panel)'], [class*='var(--theme-bg)']):not([class~='fixed']) {
+	:is(
+		[class*='bg-[var(--theme-bg)]'],
+		[class*='bg-[color-mix(in_srgb,var(--theme-panel)'],
+		[class*='bg-[color-mix(in_srgb,var(--theme-bg)']
+	):not([class~='fixed']) {
 	background-color: color-mix(
 		in srgb,
-		var(--theme-panel) calc(min(var(--dash-surface-opacity, 100), 88) * 1%),
+		var(--theme-panel) calc(clamp(60, var(--dash-surface-opacity, 100), 90) * 1%),
 		transparent
 	);
 }
@@ -81,4 +93,15 @@ body {
 	/* blur() samples past the element's edges, leaving a soft vignette; scale up
 	   so the blurred image still bleeds to every edge. */
 	scale: 1.05;
+}
+
+/* Sits between the wallpaper and the content. Paints the theme background over
+   the image, more strongly as the panels get more transparent, so a bright or
+   busy wallpaper can't wash out the text on top. Always at least a light veil. */
+.dash-scrim {
+	background-color: color-mix(
+		in srgb,
+		var(--theme-bg) calc(clamp(14, (100 - var(--dash-surface-opacity, 100)) * 1.3, 88) * 1%),
+		transparent
+	);
 }
