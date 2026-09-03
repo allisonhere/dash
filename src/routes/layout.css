@@ -51,9 +51,11 @@ body {
    nothing, so the untouched look is unchanged.
 
    The selector matches ONLY a `bg-` utility built from --theme-panel / --theme-bg
-   (Tailwind writes the source string verbatim into the class attribute). It must
-   not catch `text-[var(--theme-bg)]`, borders, or accent fills — doing so paints
-   over primary buttons and hides their labels.
+   that fades to `transparent` (Tailwind writes the source string verbatim into
+   the class attribute). It must not catch `text-[var(--theme-bg)]`, borders, or
+   accent fills — doing so paints over primary buttons and hides their labels —
+   nor the popovers (theme picker, command palette, swatch grid) whose `bg-`
+   mixes into `var(--theme-bg))` for a deliberately opaque surface.
 
    The blur lives on the single wallpaper layer (see .dash-wallpaper below), not
    on the panels — a backdrop-filter on every nested panel melts the compositor. */
@@ -62,7 +64,7 @@ body {
 		[class*='bg-[var(--theme-bg)]'],
 		[class*='bg-[color-mix(in_srgb,var(--theme-panel)'],
 		[class*='bg-[color-mix(in_srgb,var(--theme-bg)']
-	):not([class~='fixed']) {
+	):not([class~='fixed']):not([class*=',var(--theme-bg))]']) {
 	background-color: color-mix(
 		in srgb,
 		var(--theme-panel) calc(var(--dash-surface-opacity, 100) * 1%),
@@ -78,7 +80,7 @@ body {
 		[class*='bg-[var(--theme-bg)]'],
 		[class*='bg-[color-mix(in_srgb,var(--theme-panel)'],
 		[class*='bg-[color-mix(in_srgb,var(--theme-bg)']
-	):not([class~='fixed']) {
+	):not([class~='fixed']):not([class*=',var(--theme-bg))]']) {
 	background-color: color-mix(
 		in srgb,
 		var(--theme-panel) calc(clamp(60, var(--dash-surface-opacity, 100), 90) * 1%),
