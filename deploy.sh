@@ -20,6 +20,7 @@ DASH_URL="${DASH_URL:-http://192.168.86.74:3939}"
 DASH_SSH_CONFIG="${DASH_SSH_CONFIG-/dev/null}"
 DASH_SSH_IDENTITY="${DASH_SSH_IDENTITY-$HOME/.ssh/id_ed25519}"
 DEFAULT_COMMIT_MESSAGE="${DASH_COMMIT_MESSAGE:-chore: deploy dash}"
+DASH_SKIP_SYNC="${DASH_SKIP_SYNC:-0}"
 
 STEP_START=0
 TOTAL_START=0
@@ -158,6 +159,60 @@ status_report() {
   echo ""
 }
 
+sync_with_remote() {
+  if [ "$DASH_SKIP_SYNC" != "0" ]; then
+    print_warning "DASH_SKIP_SYNC set; not syncing with $DASH_REMOTE/$DASH_BRANCH"
+    return 0
+  fi
+
+  print_substep "Syncing $DASH_BRANCH with $DASH_REMOTE..."
+  git -C "$PROJECT_DIR" fetch "$DASH_REMOTE" "$DASH_BRANCH"
+
+  local local_sha remote_sha base_sha
+  local_sha=$(git -C "$PROJECT_DIR" rev-parse HEAD)
+  remote_sha=$(git -C "$PROJECT_DIR" rev-parse "$DASH_REMOTE/$DASH_BRANCH")
+  base_sha=$(git -C "$PROJECT_DIR" merge-base HEAD "$DASH_REMOTE/$DASH_BRANCH")
+
+  if [ "$local_sha" = "$remote_sha" ]; then
+    print_info "Already in sync with $DASH_REMOTE/$DASH_BRANCH ($(remote_commit))"
+    return 0
+  fi
+
+  if [ "$base_sha" = "$remote_sha" ]; then
+    print_info "Local is ahead of $DASH_REMOTE/$DASH_BRANCH; push step will publish it"
+    return 0
+  fi
+
+  if [ "$base_sha" != "$local_sha" ]; then
+    print_error "$DASH_BRANCH and $DASH_REMOTE/$DASH_BRANCH have diverged"
+    print_info "local $(local_commit), remote $(remote_commit)"
+    print_info "Reconcile first: git -C $PROJECT_DIR pull --rebase $DASH_REMOTE $DASH_BRANCH"
+    print_info "Or discard local work: git -C $PROJECT_DIR reset --hard $DASH_REMOTE/$DASH_BRANCH"
+    return 1
+  fi
+
+  # Local is strictly behind: fast-forward, parking any dirty tree first.
+  local stashed=0
+  if [ "$(dirty_count)" -gt 0 ]; then
+    print_substep "Stashing local changes before fast-forward..."
+    git -C "$PROJECT_DIR" stash push -u -m "deploy.sh auto-stash $(date +%s)"
+    stashed=1
+  fi
+
+  print_substep "Fast-forwarding to $(remote_commit)..."
+  git -C "$PROJECT_DIR" merge --ff-only "$DASH_REMOTE/$DASH_BRANCH"
+
+  if [ "$stashed" -eq 1 ]; then
+    print_substep "Restoring stashed changes..."
+    if ! git -C "$PROJECT_DIR" stash pop; then
+      print_error "Stashed changes conflict with the update; resolve them and rerun"
+      return 1
+    fi
+  fi
+
+  print_success "Fast-forwarded to $(local_commit)"
+}
+
 preflight() {
   print_substep "Checking required commands..."
   require_command git
@@ -168,6 +223,8 @@ preflight() {
   ensure_repo
   ensure_branch
   print_success "Required commands are available"
+
+  sync_with_remote
 
   print_substep "Running Svelte checks..."
   (cd "$PROJECT_DIR" && run_cmd npm run check)
@@ -379,6 +436,7 @@ Environment overrides:
   DASH_SSH_CONFIG   SSH config file for deploy SSH      (default: /dev/null)
   DASH_SSH_IDENTITY SSH private key for deploy SSH      (default: ~/.ssh/id_ed25519)
   DASH_COMMIT_MESSAGE Default non-interactive message   (default: chore: deploy dash)
+  DASH_SKIP_SYNC    Skip the preflight fetch/fast-forward (default: 0)
 USAGE
 }
 
